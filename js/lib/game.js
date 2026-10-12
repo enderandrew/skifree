@@ -32,7 +32,7 @@ class Game {
 		this._staticObjects.push(sprite);
 	}
 
-    addStaticObjects(sprites) {
+	addStaticObjects(sprites) {
 		if (!sprites || !Array.isArray(sprites)) return;
 		for (const sprite of sprites) {
 			this.addStaticObject(sprite);
@@ -72,7 +72,7 @@ class Game {
 	setMouseX(x) { this._mouseX = x; }
 	setMouseY(y) { this._mouseY = y; }
 
-	// ─── Game loop ────────────────────────────────────────────────────────────
+	// ─── Game loop ────────────────────────────────────────────────────
 
 	_tick(timestamp) {
 		if (this._paused) return;
@@ -140,6 +140,16 @@ class Game {
 		this._player.cycle(dt);
 
 		this._movingObjects.forEach(obj => obj.cycle(dt));
+
+		// Prune static objects that have scrolled 500px above the top of the viewport
+		if (typeof this._camera?.getTopOfViewport === 'function') {
+			const pruneThresholdY = this._camera.getTopOfViewport() - 500;
+			this._staticObjects.forEach(obj => {
+				if (obj.mapPosition && obj.mapPosition[1] < pruneThresholdY) {
+					obj.deleteOnNextCycle();
+				}
+			});
+		}
 
 		this._staticObjects.cull();
 		this._staticObjects.forEach(obj => {

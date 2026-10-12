@@ -89,12 +89,26 @@ class Sprite {
 
 	draw(dCtx, spriteFrame) {
 		const fr = this.data.parts[spriteFrame];
+		if (!fr) return;
+	
 		this.height = fr[3];
 		this.width = fr[2];
-
+	
 		const newCanvasPosition = dCtx.mapPositionToCanvasPosition(this.mapPosition);
 		this.setCanvasPosition(newCanvasPosition[0], newCanvasPosition[1]);
-
+	
+		// Viewport Culling: Skip drawing if completely outside canvas bounds
+		const screenW = dCtx.logicalWidth();
+		const screenH = dCtx.logicalHeight();
+		if (
+			this.canvasX + this.width < 0 ||
+			this.canvasX > screenW ||
+			this.canvasY + this.height < 0 ||
+			this.canvasY > screenH
+		) {
+			return;
+		}
+	
 		dCtx.drawImage(
 			dCtx.getLoadedImage(this.data.$imageFile),
 			fr[0], fr[1], fr[2], fr[3],

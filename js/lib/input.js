@@ -1,13 +1,55 @@
 export default function setupInput({ player, game, canvas, spawnMonster, spawnBoarder, resetGame }) {
-	// Prevent native gestures (pull-to-refresh, pinch zoom) while touching the canvas
 	canvas.style.touchAction = 'none';
 
-	const updatePointerPosition = (clientX, clientY) => {
-		const rect = canvas.getBoundingClientRect();
-		game.setMouseX(clientX - rect.left);
-		game.setMouseY(clientY - rect.top);
-		player.resetDirection();
-		player.startMovingIfPossible();
+	const executeJumpOrTrick = () => {
+		if (game.isPaused()) {
+			resetGame();
+			return;
+		}
+		if (player.isJumping) {
+			player.trickFlip();
+		} else {
+			player.jump();
+		}
+	};
+
+	const handleLeft = () => {
+		if (player.isJumping) {
+			player.trickTwisterLeft();
+		} else if (player.direction === 270) {
+			player.stepWest();
+		} else {
+			player.turnWest();
+		}
+	};
+
+	const handleRight = () => {
+		if (player.isJumping) {
+			player.trickTwisterRight();
+		} else if (player.direction === 90) {
+			player.stepEast();
+		} else {
+			player.turnEast();
+		}
+	};
+
+	const handleDown = () => {
+		if (player.isJumping) {
+			player.trickFlip();
+		} else {
+			player.setDirection(180);
+			player.startMovingIfPossible();
+		}
+	};
+
+	const handleUp = () => {
+		if (player.isJumping) {
+			player.trickDaffy();
+		} else if (player.direction === 90 || player.direction === 270) {
+			player.stepUp();
+		} else {
+			player.stop();
+		}
 	};
 
 	// ─── Mouse & Pointer Events ───────────────────────────────────────────────
@@ -19,18 +61,27 @@ export default function setupInput({ player, game, canvas, spawnMonster, spawnBo
 		activePointerId = e.pointerId;
 		canvas.setPointerCapture(e.pointerId);
 
-		const now = performance.now();
-		if (now - lastTapTime < 300) {
-			player.speedBoost();
+		// Primary button click triggers Jump
+		if (e.button === 0) {
+			const now = performance.now();
+			if (now - lastTapTime < 300) {
+				player.speedBoost();
+			} else {
+				executeJumpOrTrick();
+			}
+			lastTapTime = now;
 		}
-		lastTapTime = now;
-
-		updatePointerPosition(e.clientX, e.clientY);
 	});
 
 	canvas.addEventListener('pointermove', e => {
 		if (e.pointerType === 'mouse' || e.pointerId === activePointerId) {
-			updatePointerPosition(e.clientX, e.clientY);
+			const rect = canvas.getBoundingClientRect();
+			game.setMouseX(e.clientX - rect.left);
+			game.setMouseY(e.clientY - rect.top);
+			if (!player.isJumping) {
+				player.resetDirection();
+				player.startMovingIfPossible();
+			}
 		}
 	});
 
@@ -46,59 +97,72 @@ export default function setupInput({ player, game, canvas, spawnMonster, spawnBo
 	// ─── Native Keyboard Events ───────────────────────────────────────────────
 
 	window.addEventListener('keydown', e => {
-		// Prevent scrolling with arrows or spacebar
-		if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+		if (['Space', 'Insert', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
 			e.preventDefault();
 		}
 
 		switch (e.code) {
-			case 'KeyW':
-			case 'ArrowUp':
-				player.stop();
-				break;
-
-			case 'KeyA':
+			// Left
 			case 'ArrowLeft':
-				if (player.direction === 270) {
-					player.stepWest();
-				} else {
-					player.turnWest();
-				}
+			case 'KeyA':
+			case 'Numpad4':
+				handleLeft();
 				break;
 
-			case 'KeyS':
+			// Right
+			case 'ArrowRight':
+			case 'KeyD':
+			case 'Numpad6':
+				handleRight();
+				break;
+
+			// Down
 			case 'ArrowDown':
-				player.setDirection(180);
+			case 'KeyS':
+			case 'Numpad2':
+				handleDown();
+				break;
+
+			// Up
+			case 'ArrowUp':
+			case 'KeyW':
+			case 'Numpad8':
+				handleUp();
+				break;
+
+			// Jump Keys
+			case 'Insert':
+			case 'Space':
+			case 'KeyE':
+			case 'Numpad0':
+				executeJumpOrTrick();
+				break;
+
+			// Numpad Direct Directions
+			case 'Numpad7':
+				player.setDirection(270);
+				break;
+			case 'Numpad9':
+				player.setDirection(90);
+				break;
+			case 'Numpad1':
+				player.setDirection(210);
+				player.startMovingIfPossible();
+				break;
+			case 'Numpad3':
+				player.setDirection(150);
 				player.startMovingIfPossible();
 				break;
 
-			case 'KeyD':
-			case 'ArrowRight':
-				if (player.direction === 90) {
-					player.stepEast();
-				} else {
-					player.turnEast();
-				}
-				break;
-
+			// Modifiers & Cheats
 			case 'KeyF':
 				player.speedBoost();
 				break;
-
-			case 'KeyT':
-				player.attemptTrick();
-				break;
-
 			case 'KeyM':
 				spawnMonster();
 				break;
-
 			case 'KeyB':
 				spawnBoarder();
-				break;
-
-			case 'Space':
-				resetGame();
 				break;
 		}
 	});
@@ -108,9 +172,7 @@ export default function setupInput({ player, game, canvas, spawnMonster, spawnBo
 	const previousButtonStates = new Map();
 	let stickSteerCooldown = 0;
 
-	const isButtonPressed = (button) => {
-		return typeof button === 'object' ? button.pressed : button > 0.5;
-	};
+	const isButtonPressed = btn => (typeof btn === 'object' ? btn.pressed : btn > 0.5);
 
 	const pollGamepads = () => {
 		const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -120,34 +182,42 @@ export default function setupInput({ player, game, canvas, spawnMonster, spawnBo
 		const prev = previousButtonStates.get(gp.index) || {};
 		const current = {};
 
-		const buttonA = isButtonPressed(gp.buttons[0]);
-		const buttonB = isButtonPressed(gp.buttons[1]);
-		const buttonX = isButtonPressed(gp.buttons[2]);
+		// Face buttons, Bumpers, and Triggers all act as Jump/Trick triggers
+		const jumpButtons = [0, 1, 2, 3, 4, 5, 6, 7];
+		let anyJumpPressed = false;
+		for (const idx of jumpButtons) {
+			if (gp.buttons[idx] && isButtonPressed(gp.buttons[idx])) {
+				if (!prev[`btn${idx}`]) anyJumpPressed = true;
+				current[`btn${idx}`] = true;
+			}
+		}
+
+		if (anyJumpPressed) {
+			executeJumpOrTrick();
+		}
+
+		// Start / Pause
 		const buttonStart = isButtonPressed(gp.buttons[9]);
+		if (buttonStart && !prev.buttonStart) resetGame();
+		current.buttonStart = buttonStart;
+
+		// D-Pad Steering
 		const dpadUp = isButtonPressed(gp.buttons[12]);
 		const dpadDown = isButtonPressed(gp.buttons[13]);
 		const dpadLeft = isButtonPressed(gp.buttons[14]);
 		const dpadRight = isButtonPressed(gp.buttons[15]);
 
-		// Actions (Edge-triggered on press down)
-		if (buttonA && !prev.buttonA) player.attemptTrick();
-		if ((buttonB && !prev.buttonB) || (buttonX && !prev.buttonX)) player.speedBoost();
-		if (buttonStart && !prev.buttonStart) resetGame();
+		if (dpadUp && !prev.dpadUp) handleUp();
+		if (dpadDown && !prev.dpadDown) handleDown();
+		if (dpadLeft && !prev.dpadLeft) handleLeft();
+		if (dpadRight && !prev.dpadRight) handleRight();
 
-		// Steering (D-Pad edge triggered)
-		if (dpadUp && !prev.dpadUp) player.stop();
-		if (dpadDown && !prev.dpadDown) {
-			player.setDirection(180);
-			player.startMovingIfPossible();
-		}
-		if (dpadLeft && !prev.dpadLeft) {
-			player.direction === 270 ? player.stepWest() : player.turnWest();
-		}
-		if (dpadRight && !prev.dpadRight) {
-			player.direction === 90 ? player.stepEast() : player.turnEast();
-		}
+		current.dpadUp = dpadUp;
+		current.dpadDown = dpadDown;
+		current.dpadLeft = dpadLeft;
+		current.dpadRight = dpadRight;
 
-		// Analog Stick Steering (Stick X & Y with deadzone)
+		// Analog Stick
 		const stickX = gp.axes[0] || 0;
 		const stickY = gp.axes[1] || 0;
 		const DEADZONE = 0.35;
@@ -155,29 +225,19 @@ export default function setupInput({ player, game, canvas, spawnMonster, spawnBo
 		stickSteerCooldown--;
 		if (stickSteerCooldown <= 0) {
 			if (stickY < -0.7) {
-				player.stop();
+				handleUp();
 				stickSteerCooldown = 15;
 			} else if (stickY > 0.7) {
-				player.setDirection(180);
-				player.startMovingIfPossible();
+				handleDown();
 				stickSteerCooldown = 15;
 			} else if (stickX < -DEADZONE) {
-				player.direction === 270 ? player.stepWest() : player.turnWest();
+				handleLeft();
 				stickSteerCooldown = 10;
 			} else if (stickX > DEADZONE) {
-				player.direction === 90 ? player.stepEast() : player.turnEast();
+				handleRight();
 				stickSteerCooldown = 10;
 			}
 		}
-
-		current.buttonA = buttonA;
-		current.buttonB = buttonB;
-		current.buttonX = buttonX;
-		current.buttonStart = buttonStart;
-		current.dpadUp = dpadUp;
-		current.dpadDown = dpadDown;
-		current.dpadLeft = dpadLeft;
-		current.dpadRight = dpadRight;
 
 		previousButtonStates.set(gp.index, current);
 	};

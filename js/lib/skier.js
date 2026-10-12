@@ -11,7 +11,6 @@ import {
 	SKIER_CRASH_RECOVERY_MS,
 	SKIER_JUMP_DURATION_MS,
 	SKIER_JUMP_SPEED_BONUS,
-	SKIER_TRICK_INTERVAL_MS,
 } from './constants.js';
 
 const DISCRETE_DIRECTIONS = {
@@ -29,7 +28,6 @@ class Skier extends Sprite {
 		super(data);
 
 		this._cancelableStateTimeout = null;
-		this._cancelableStateInterval = null;
 		this._boostTimeout = null;
 		this._boostCooldownTimeout = null;
 		this._canSpeedBoost = true;
@@ -41,14 +39,22 @@ class Skier extends Sprite {
 		this._speedXFactor = 0;
 		this._speedY = 0;
 		this._speedYFactor = 1;
-		this._trickStep = 0;
+
+		// Trick & style points system
+		this.stylePoints = 0;
+		this._pendingTrickPoints = 0;
+		this._trickPose = null;
+		this._somersaultStage = 0; // 0 = upright, 1 = tuck, 2 = inverted
+		this._isWalkingUp = false;
+		this._walkStep = 0;
+		this._walkDirection = 'east';
 
 		this.isMoving = true;
 		this.hasBeenHit = false;
 		this.isOuching = false;
 		this.isJumping = false;
-		this.isPerformingTrick = false;
 		this.onHitObstacleCb = () => {};
+		this.onStylePointsCb = () => {};
 
 		this.setSpeed(this._standardSpeed);
 	}
@@ -58,10 +64,6 @@ class Skier extends Sprite {
 			clearTimeout(this._cancelableStateTimeout);
 			this._cancelableStateTimeout = null;
 		}
-		if (this._cancelableStateInterval) {
-			clearInterval(this._cancelableStateInterval);
-			this._cancelableStateInterval = null;
-		}
 	}
 
 	_setNormal() {
@@ -70,7 +72,8 @@ class Skier extends Sprite {
 		this.hasBeenHit = false;
 		this.isOuching = false;
 		this.isJumping = false;
-		this.isPerformingTrick = false;
+		this._trickPose = null;
+		this._somersaultStage = 0;
 		this._clearTimers();
 		this.setMapPosition(undefined, undefined, 0);
 	}
@@ -80,7 +83,8 @@ class Skier extends Sprite {
 		this.hasBeenHit = true;
 		this.isOuching = true;
 		this.isJumping = false;
-		this.isPerformingTrick = false;
+		this._trickPose = null;
+		this._somersaultStage = 0;
 		this._clearTimers();
 		this.setMapPosition(undefined, undefined, 0);
 	}
@@ -90,20 +94,104 @@ class Skier extends Sprite {
 		this.hasBeenHit = true;
 		this.isOuching = false;
 		this.isJumping = false;
-		this.isPerformingTrick = false;
+		this._trickPose = null;
+		this._somersaultStage = 0;
 		this._clearTimers();
 		this.setMapPosition(undefined, undefined, 0);
 	}
 
-	_setJumping() {
+	_setJumping(duration = SKIER_JUMP_DURATION_MS) {
 		const currentSpeed = this.getSpeed();
 		this.setSpeed(currentSpeed + SKIER_JUMP_SPEED_BONUS);
 		this.setSpeedY(currentSpeed + SKIER_JUMP_SPEED_BONUS);
 		this.isMoving = true;
 		this.hasBeenHit = false;
 		this.isJumping = true;
+		this._trickPose = 'jumping';
+		this._somersaultStage = 0;
+		this._pendingTrickPoints = 0;
+		this._isWalkingUp = false;
 		this.setMapPosition(undefined, undefined, 1);
+
+		if (this._cancelableStateTimeout) clearTimeout(this._cancelableStateTimeout);
+		this._cancelableStateTimeout = setTimeout(() => this._land(), duration);
 	}
+
+	_land() {
+		if (!this.isJumping) return;
+
+		// Crash if landed mid-somersault / upside down
+		if (this._somersaultStage !== 0) {
+			this.hasHitObstacle({ id: 'bad-landing' });
+			this.deductStylePoints(300);
+			return;
+		}
+
+		// Clean landing awards accumulated trick points
+		if (this._pendingTrickPoints > 0) {
+			this.addStylePoints(this._pendingTrickPoints);
+			this._pendingTrickPoints = 0;
+		}
+
+		this._setNormal();
+	}
+
+	jump(duration) {
+		if (this.isJumping || this.hasBeenHit || this.isBeingEaten) return;
+		this._setJumping(duration);
+	}
+
+	// ─── Mid-Air Tricks ───────────────────────────────────────────────────────
+
+	trickFlip() {
+		if (!this.isJumping) return;
+		this._somersaultStage = (this._somersaultStage + 1) % 3;
+
+		if (this._somersaultStage === 1) {
+			this._trickPose = 'somersault1';
+		} else if (this._somersaultStage === 2) {
+			this._trickPose = 'somersault2';
+		} else {
+			this._trickPose = 'jumping';
+			this._pendingTrickPoints += 500; // Completed full 360 flip!
+		}
+	}
+
+	trickDaffy() {
+		if (!this.isJumping) return;
+		this._trickPose = 'daffy';
+		this._pendingTrickPoints += 200;
+	}
+
+	trickTwisterLeft() {
+		if (!this.isJumping) return;
+		this._trickPose = 'trickTipCross';
+		this._pendingTrickPoints += 100;
+	}
+
+	trickTwisterRight() {
+		if (!this.isJumping) return;
+		this._trickPose = 'trickTwinTips';
+		this._pendingTrickPoints += 100;
+	}
+
+	attemptTrick() {
+		this.trickFlip();
+	}
+
+	// ─── Style Points ─────────────────────────────────────────────────────────
+
+	addStylePoints(pts) {
+		this.stylePoints += pts;
+		this.onStylePointsCb(this.stylePoints, pts);
+	}
+
+	deductStylePoints(pts) {
+		this.stylePoints = Math.max(0, this.stylePoints - pts);
+		this.onStylePointsCb(this.stylePoints, -pts);
+	}
+
+	// ─── Steering & Uphill Movement ──────────────────────────────────────────
 
 	_getDiscreteDirection() {
 		if (this.direction) {
@@ -133,30 +221,39 @@ class Skier extends Sprite {
 	}
 
 	_setDiscreteDirection(d) {
+		this._isWalkingUp = false;
 		if (DISCRETE_DIRECTIONS[d]) {
 			this.setDirection(DISCRETE_DIRECTIONS[d]);
 		}
 		this.isMoving = (d !== 'west' && d !== 'east');
 	}
 
-	_getBeingEatenSprite() { return 'blank'; }
-	_getJumpingSprite() { return 'jumping'; }
-
-	_getTrickSprite() {
-		if (this._trickStep === 0) return 'jumping';
-		if (this._trickStep === 1) return 'somersault1';
-		return 'somersault2';
+	stepWest() {
+		if (this.hasBeenHit) return;
+		this._isWalkingUp = false;
+		this.mapPosition[0] -= this.speed * 2;
 	}
 
-	_easeSpeedToTargetUsingFactor(sp, targetSpeed, f) {
-		if (f === 0 || f === 1) return targetSpeed;
-		if (sp < targetSpeed) sp += this.getSpeed() * (f / this._turnEaseCycles);
-		if (sp > targetSpeed) sp -= this.getSpeed() * (f / this._turnEaseCycles);
-		return sp;
+	stepEast() {
+		if (this.hasBeenHit) return;
+		this._isWalkingUp = false;
+		this.mapPosition[0] += this.speed * 2;
+	}
+
+	stepUp() {
+		if (this.hasBeenHit || this.isJumping) return;
+		const dir = this._getDiscreteDirection();
+		if (dir === 'east' || dir === 'west') {
+			this.mapPosition[1] -= this.speed * 1.5;
+			this._isWalkingUp = true;
+			this._walkDirection = dir;
+			this._walkStep = (this._walkStep + 1) % 9;
+		}
 	}
 
 	stop() {
 		if (this.isJumping) return;
+		this._isWalkingUp = false;
 		if (this.direction > 180) {
 			this._setDiscreteDirection('west');
 		} else {
@@ -190,16 +287,6 @@ class Skier extends Sprite {
 		}
 	}
 
-	stepWest() {
-		if (this.hasBeenHit) return;
-		this.mapPosition[0] -= this.speed * 2;
-	}
-
-	stepEast() {
-		if (this.hasBeenHit) return;
-		this.mapPosition[0] += this.speed * 2;
-	}
-
 	setMapPositionTarget(x, y) {
 		if (this.hasBeenHit) return;
 		if (Math.abs(this.mapPosition[0] - x) <= SKIER_DEAD_ZONE_X) {
@@ -211,6 +298,7 @@ class Skier extends Sprite {
 	startMovingIfPossible() {
 		if (!this.hasBeenHit && !this.isBeingEaten) {
 			this.isMoving = true;
+			this._isWalkingUp = false;
 		}
 	}
 
@@ -232,6 +320,13 @@ class Skier extends Sprite {
 
 	setSpeedY(sy) {
 		this._speedY = sy;
+	}
+
+	_easeSpeedToTargetUsingFactor(sp, targetSpeed, f) {
+		if (f === 0 || f === 1) return targetSpeed;
+		if (sp < targetSpeed) sp += this.getSpeed() * (f / this._turnEaseCycles);
+		if (sp > targetSpeed) sp -= this.getSpeed() * (f / this._turnEaseCycles);
+		return sp;
 	}
 
 	getSpeedX() {
@@ -276,16 +371,15 @@ class Skier extends Sprite {
 			return this._speedY;
 		}
 
-		// south
 		this._speedY = this._easeSpeedToTargetUsingFactor(this._speedY, this.getSpeed(), this._speedYFactor);
 		return this._speedY;
 	}
 
 	cycle(dt = 1) {
-		if (this.getSpeedX() <= 0 && this.getSpeedY() <= 0) {
+		if (this.getSpeedX() <= 0 && this.getSpeedY() <= 0 && !this._isWalkingUp) {
 			this.isMoving = false;
 		}
-		if (this.isMoving) {
+		if (this.isMoving && !this._isWalkingUp) {
 			this._pixelsTravelled += this.speed * dt;
 		}
 		if (this.isJumping) {
@@ -297,12 +391,16 @@ class Skier extends Sprite {
 
 	draw(dContext) {
 		const spritePartToUse = () => {
-			if (this.isBeingEaten) return this._getBeingEatenSprite();
-			if (this.isJumping) {
-				return this.isPerformingTrick ? this._getTrickSprite() : this._getJumpingSprite();
-			}
+			if (this.isBeingEaten) return 'blank';
+			if (this.isJumping) return this._trickPose || 'jumping';
 			if (this.isOuching) return 'ouch';
 			if (this.hasBeenHit) return 'hit';
+
+			if (this._isWalkingUp) {
+				const prefix = this._walkDirection === 'west' ? 'walkWest' : 'walkEast';
+				return `${prefix}${this._walkStep + 1}`;
+			}
+
 			return this._getDiscreteDirection();
 		};
 
@@ -330,26 +428,15 @@ class Skier extends Sprite {
 		}, SKIER_BOOST_DURATION_MS);
 	}
 
-	attemptTrick() {
-		if (this.isJumping) {
-			this.isPerformingTrick = true;
-			if (this._cancelableStateInterval) {
-				clearInterval(this._cancelableStateInterval);
-			}
-			this._cancelableStateInterval = setInterval(() => {
-				this._trickStep = this._trickStep >= 2 ? 0 : this._trickStep + 1;
-			}, SKIER_TRICK_INTERVAL_MS);
-		}
-	}
-
 	hasHitObstacle(obs) {
 		this._setOuching();
+		this.deductStylePoints(100);
 
 		if (typeof navigator !== 'undefined') {
 			navigator.vibrate?.(500);
 		}
 
-		this._obstaclesHit.push(obs.id);
+		if (obs?.id) this._obstaclesHit.push(obs.id);
 		this.resetSpeed();
 		this.onHitObstacleCb(obs);
 
@@ -363,12 +450,9 @@ class Skier extends Sprite {
 		}, SKIER_OUCH_DURATION_MS);
 	}
 
-	hasHitJump() {
+	hasHitJump(jumpObj) {
 		if (!this.isMoving) return;
 		this._setJumping();
-
-		if (this._cancelableStateTimeout) clearTimeout(this._cancelableStateTimeout);
-		this._cancelableStateTimeout = setTimeout(() => this._setNormal(), SKIER_JUMP_DURATION_MS);
 	}
 
 	isEatenBy(monster, whenEaten) {
@@ -386,18 +470,24 @@ class Skier extends Sprite {
 
 		this._obstaclesHit = [];
 		this._pixelsTravelled = 0;
+		this.stylePoints = 0;
+		this._pendingTrickPoints = 0;
+		this._isWalkingUp = false;
 		this.isMoving = true;
 		this.isJumping = false;
 		this.hasBeenHit = false;
 		this.isOuching = false;
 		this.isBeingEaten = false;
-		this.isPerformingTrick = false;
 		this._canSpeedBoost = true;
 		this.resetSpeed();
 	}
 
 	setHitObstacleCb(fn) {
 		this.onHitObstacleCb = fn || (() => {});
+	}
+
+	setStylePointsCb(fn) {
+		this.onStylePointsCb = fn || (() => {});
 	}
 }
 

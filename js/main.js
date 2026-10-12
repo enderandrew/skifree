@@ -9,6 +9,7 @@ import setupInput from './lib/input.js';
 import isMobileDevice from './lib/isMobileDevice.js';
 import sprites from './spriteInfo.js';
 import SkiLift, { SkiLiftManager } from './lib/skiLift.js';
+import { SlalomCourse } from './lib/slalomCourse.js';
 import { PIXELS_PER_METRE, MONSTER_DISTANCE_THRESHOLD } from './lib/constants.js';
 
 const mainCanvas = document.getElementById('skifree-canvas');
@@ -18,7 +19,18 @@ const infoBoxControls = isMobileDevice()
 	? 'Tap or drag on the piste to control the player'
 	: 'Use the mouse or WASD to control the player';
 
-const dropRates = { smallTree: 4, tallTree: 2, jump: 1, thickSnow: 1, rock: 1 };
+const dropRates = {
+	smallTree: 4,
+	tallTree: 2,
+	decoratedTallTree: 0.5,
+	jump: 1,
+	thickSnow: 1,
+	rock: 1,
+	stump: 1,
+	deadTree: 1,
+	mogul: 2,
+	mushroom: 0.2
+};
 
 const state = {
 	livesLeft: 5,
@@ -59,6 +71,7 @@ function startNeverEndingGame() {
 	let infoBox;
 	let game;
 	let skiLiftManager;
+	let slalomCourse;
 
 	function resetGame() {
 		state.distanceTravelled = 0;
@@ -67,6 +80,25 @@ function startNeverEndingGame() {
 		game.reset();
 		game.addStaticObject(startSign);
 		skiLiftManager.reset();
+		slalomCourse.reset();
+		spawnStartingSignArea();
+	}
+
+	function spawnStartingSignArea() {
+		// 1. Slalom billboard (Left route: X = -500)
+		const slalomSign = new Sprite(sprites.signSlalom);
+		slalomSign.setMapPosition(-500, -20);
+		game.addStaticObject(slalomSign);
+
+		// 2. Freestyle billboard (Center route: X = 0)
+		const freestyleSign = new Sprite(sprites.signFreestyle);
+		freestyleSign.setMapPosition(0, -20);
+		game.addStaticObject(freestyleSign);
+
+		// 3. Tree Slalom billboard (Right route: X = 500)
+		const treeSlalomSign = new Sprite(sprites.signTreeSlalom);
+		treeSlalomSign.setMapPosition(500, -20);
+		game.addStaticObject(treeSlalomSign);
 	}
 
 	function detectEnd() {
@@ -118,9 +150,14 @@ function startNeverEndingGame() {
 		return Sprite.createObjects([
 			{ sprite: sprites.smallTree, dropRate: dropRates.smallTree },
 			{ sprite: sprites.tallTree, dropRate: dropRates.tallTree },
+			{ sprite: sprites.decoratedTallTree, dropRate: dropRates.decoratedTallTree },
 			{ sprite: sprites.jump, dropRate: dropRates.jump },
 			{ sprite: sprites.thickSnow, dropRate: dropRates.thickSnow },
 			{ sprite: sprites.rock, dropRate: dropRates.rock },
+			{ sprite: sprites.stump, dropRate: dropRates.stump },
+			{ sprite: sprites.deadTree, dropRate: dropRates.deadTree },
+			{ sprite: sprites.mogul, dropRate: dropRates.mogul },
+			{ sprite: sprites.mushroom, dropRate: dropRates.mushroom },
 		], {
 			rateModifier: Math.max(800 - camera.logicalWidth(), 0),
 			position: () => camera.getRandomMapPositionBelowViewport(),
@@ -137,23 +174,82 @@ function startNeverEndingGame() {
 	}
 
 	function updateHUD() {
-		infoBox.setLines([
-			'SkiFree.js',
-			infoBoxControls,
-			`Travelled ${state.distanceTravelled.toFixed(1)}m`,
-			`Skiers left: ${state.livesLeft}`,
-			`High Score: ${state.highScore.toFixed(1)}`,
-			'Created by Dan Hough (@basicallydan)',
-			`Current Speed: ${player.getSpeed()}`,
-		]);
+		const courseHUD = slalomCourse.getHUDLines();
+		if (courseHUD) {
+			infoBox.setLines([
+				'SkiFree.js',
+				...courseHUD,
+				`Travelled: ${state.distanceTravelled.toFixed(1)}m`,
+				`Style Points: ${player.stylePoints}`,
+				`Speed: ${player.getSpeed()}`
+			]);
+		} else {
+			infoBox.setLines([
+				'SkiFree.js',
+				'Space / Ins / Left-Click / E = Jump | Air: Up/Down=Flip, Left/Right=Twist',
+				'Slalom (Left) | Freestyle (Center) | Tree Slalom (Right)',
+				`Travelled ${state.distanceTravelled.toFixed(1)}m`,
+				`Style Points: ${player.stylePoints}`,
+				`Skiers left: ${state.livesLeft}`,
+				`High Score: ${state.highScore.toFixed(1)}`,
+				`Speed: ${player.getSpeed()}`,
+			]);
+		}
 	}
 
 	player = new Skier(sprites.skier);
-	player.setMapPosition(0, 0);
-	player.setMapPositionTarget(0, -10);
+	player.setMapPosition(0, -60);
+	player.setMapPositionTarget(0, 0);
 
 	game = new Game(camera, player);
 	skiLiftManager = new SkiLiftManager({ game, camera, player, columnSpacing: 1500, baseColumnX: -250 });
+	slalomCourse = new SlalomCourse({ game, player, camera });
+
+	// ─── Special Terrain Interactions ────────────────────────────────────────
+
+	// Dead Tree: Ignites into animated burningTree when jumped over
+	sprites.deadTree.hitBehaviour.skier = (deadTree, skier) => {
+		if (skier.isJumping) {
+			const burningTree = new Sprite(sprites.burningTree);
+			burningTree.setMapPosition(deadTree.mapPosition[0], deadTree.mapPosition[1]);
+
+			let frame = 1;
+			let animTick = 0;
+			burningTree.cycle = (dt = 1) => {
+				animTick += dt;
+				if (animTick >= 6) { // Cycles fire frames every ~120ms
+					frame = (frame % 3) + 1;
+					animTick = 0;
+				}
+			};
+			burningTree.draw = (ctx) => {
+				return Sprite.prototype.draw.call(burningTree, ctx, `frame${frame}`);
+			};
+
+			deadTree.deleteOnNextCycle();
+			game.addStaticObject(burningTree);
+			skier.addStylePoints(200);
+		} else {
+			skier.hasHitObstacle(deadTree);
+		}
+	};
+
+	// Mogul: Gives the skier a mini-jump / hop when skied over
+	sprites.mogul.hitBehaviour.skier = (mogul, skier) => {
+		if (!skier.isJumping && skier.isMoving) {
+			skier.jump(400); // 400ms mini-hop instead of the standard 1000ms jump
+		}
+	};
+
+	// Mushroom: Vanishes and awards +100 Style Points when grabbed mid-air
+	sprites.mushroom.hitBehaviour.skier = (mushroom, skier) => {
+		if (skier.isJumping) {
+			skier.addStylePoints(100);
+			mushroom.deleteOnNextCycle();
+		}
+	};
+
+	spawnStartingSignArea();
 
 	startSign = new Sprite(sprites.signStart);
 	game.addStaticObject(startSign);
@@ -173,10 +269,25 @@ function startNeverEndingGame() {
 
 	game.beforeCycle(() => {
 		skiLiftManager.update();
+
+		// Check if player has initiated a course at the top of the mountain
+		if (!slalomCourse.isActive && player.mapPosition[1] >= 0) {
+			if (player.mapPosition[0] < -300) {
+				slalomCourse.buildCourse('slalom', -500);
+				slalomCourse.start();
+			} else if (player.mapPosition[0] > 300) {
+				slalomCourse.buildCourse('treeSlalom', 500);
+				slalomCourse.start();
+			}
+		}
+
+		slalomCourse.update();
+
 		const newTerrain = spawnTerrain();
 		if (newTerrain && newTerrain.length) {
 			game.addStaticObjects(newTerrain);
 		}
+
 		if (!game.isPaused()) {
 			tickNPCs();
 			updateHUD();
