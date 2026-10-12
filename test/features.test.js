@@ -7,6 +7,7 @@ import Dog from '../js/lib/dog.js';
 import NoviceSkier from '../js/lib/noviceSkier.js';
 import Snowboarder from '../js/lib/snowboarder.js';
 import { SkiLift, SkiLiftManager, DOWN_CABLE_OFFSET, UP_CABLE_OFFSET } from '../js/lib/skiLift.js';
+import { SKI_LIFT_STANDARD_SPEED } from '../js/lib/constants.js';
 
 function makeCtx() {
 	return {
@@ -214,7 +215,7 @@ describe('Ski lift', () => {
 		chair.setMapPosition(0, -1000, 1);
 		chair.cycle(1);
 		// -1000 is above the band, so it moves down by whole loops
-		expect((chair.mapPosition[1] - (-1000 - 6)) % 1800).toBe(0);
+		expect((chair.mapPosition[1] - (-1000 - SKI_LIFT_STANDARD_SPEED)) % 1800).toBe(0);
 		expect(chair.mapPosition[1]).toBeGreaterThanOrEqual(-400);
 	});
 
@@ -337,5 +338,104 @@ describe('NPCs', () => {
 		const boarder = new Snowboarder(sprites.snowboarder);
 		boarder.doTrick('grab');
 		expect(drawnRegion(boarder).region).toEqual(sprites.snowboarder.parts.grab.slice(0, 4));
+	});
+});
+
+describe('small objects and original-game behaviour', () => {
+	it('registers a hit on an object narrower than the skier sitting inside its box', () => {
+		const skier = new Skier(sprites.skier);
+		const mushroom = new Sprite(sprites.mushroom);
+		skier.jump();
+		skier.canvasX = 100; skier.canvasY = 100; skier.width = 32; skier.height = 34;
+		mushroom.canvasX = 112; mushroom.canvasY = 110; mushroom.width = 8; mushroom.height = 11;
+		expect(skier.hits(mushroom)).toBe(true);
+	});
+
+	it('a jumping skier touches a stump (so it can turn into a mushroom)', () => {
+		const skier = new Skier(sprites.skier);
+		const stump = new Sprite(sprites.stump);
+		skier.jump();
+		skier.canvasX = stump.canvasX = 100; skier.canvasY = stump.canvasY = 100;
+		skier.width = skier.height = stump.width = stump.height = 30;
+		expect(skier.hits(stump)).toBe(true);
+	});
+
+	it('each take-off gets a new jump number', () => {
+		vi.useFakeTimers();
+		const skier = new Skier(sprites.skier);
+		skier.jump();
+		const first = skier.jumpCount;
+		vi.advanceTimersByTime(1100);
+		skier.jump();
+		expect(skier.jumpCount).toBe(first + 1);
+	});
+
+	it('deep snow halves how far the skier travels while in it', () => {
+		const a = new Skier(sprites.skier);
+		const b = new Skier(sprites.skier);
+		for (const s of [a, b]) { s.setDirection(180); s.setMapPosition(0, 0); }
+		b.enterDeepSnow();
+		a.cycle(1);
+		b.cycle(1);
+		expect(b.mapPosition[1]).toBeCloseTo(a.mapPosition[1] / 2, 0);
+		b.cycle(1); b.cycle(1);
+		expect(b.isInDeepSnow()).toBe(false); // wears off after leaving the patch
+	});
+
+	it('side-stepping shows the skating frames, mirrored when facing west', () => {
+		const skier = new Skier(sprites.skier);
+		skier.setDirection(270);
+		skier.stepWest();
+		let drawn = drawnRegion(skier);
+		expect(drawn.mirrored).toBe(true);
+		expect([sprites.skier.parts.skateEast1.slice(0, 4), sprites.skier.parts.skateEast2.slice(0, 4)])
+			.toContainEqual(drawn.region);
+		skier.setDirection(90);
+		skier.stepEast();
+		drawn = drawnRegion(skier);
+		expect(drawn.mirrored).toBe(false);
+	});
+
+	it('lift chairs travel slower than a skier', async () => {
+		const { SKI_LIFT_STANDARD_SPEED, SKIER_STANDARD_SPEED } = await import('../js/lib/constants.js');
+		expect(SKI_LIFT_STANDARD_SPEED).toBeLessThan(SKIER_STANDARD_SPEED);
+	});
+});
+
+describe('end-to-end through the game loop', () => {
+	it('jumping over a mushroom collects it for 100 points', async () => {
+		vi.useFakeTimers();
+		const { default: Game } = await import('../js/lib/game.js');
+		const player = new Skier(sprites.skier);
+		const camera = {
+			getCentreOfViewport: () => 400,
+			logicalWidth: () => 800,
+			logicalHeight: () => 600,
+			followSprite: () => {},
+			clearRect: () => {},
+			getTopOfViewport: () => player.mapPosition[1] - 300,
+			canvasPositionToMapPosition: ([x, y]) => [player.mapPosition[0] + x - 400, player.mapPosition[1] + y - 300],
+			mapPositionToCanvasPosition: ([x, y]) => [x - player.mapPosition[0] + 400, y - player.mapPosition[1] + 300],
+			getLoadedImage: () => ({}),
+			drawImage: () => {}, save: () => {}, restore: () => {}, translate: () => {}, scale: () => {},
+		};
+		const game = new Game(camera, player);
+		game.start = () => {};
+		const mushroom = new Sprite(sprites.mushroom);
+		mushroom.setMapPosition(8, 60);
+		mushroom.onHitting(player, (m, skier) => {
+			if (skier.isJumping) { skier.addStylePoints(100); m.deleteOnNextCycle(); }
+		});
+		game.addStaticObject(mushroom);
+
+		player.setMapPosition(0, 0);
+		player.setDirection(180);
+		player.jump();
+		for (let i = 0; i < 40 && !mushroom.deleted; i++) {
+			game.cycle(1);
+			game.draw();
+		}
+		expect(mushroom.deleted).toBe(true);
+		expect(player.stylePoints).toBe(100);
 	});
 });

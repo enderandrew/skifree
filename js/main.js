@@ -4,6 +4,7 @@ import Sprite from './lib/sprite.js';
 import Snowboarder from './lib/snowboarder.js';
 import Dog from './lib/dog.js';
 import NoviceSkier from './lib/noviceSkier.js';
+import ScorePopup from './lib/scorePopup.js';
 import Skier from './lib/skier.js';
 import InfoBox from './lib/infoBox.js';
 import Game from './lib/game.js';
@@ -335,13 +336,42 @@ function startNeverEndingGame() {
 		sprites[key].hitBehaviour.skier = mogulHop;
 	}
 
+	// Stump: as in the original, jumping over one turns it into a mushroom
+	sprites.stump.hitBehaviour.skier = (stump, skier) => {
+		if (skier.isJumping) {
+			const mushroom = new Sprite(sprites.mushroom);
+			mushroom.setMapPosition(stump.mapPosition[0] + 4, stump.mapPosition[1]);
+			// Not collectable on the same jump that revealed it
+			mushroom.revealedOnJump = skier.jumpCount;
+			mushroom.onHitting(skier, sprites.mushroom.hitBehaviour.skier);
+			stump.deleteOnNextCycle();
+			game.addStaticObject(mushroom);
+		} else {
+			skier.hasHitObstacle(stump);
+		}
+	};
+
 	// Mushroom: Vanishes and awards +100 Style Points when grabbed mid-air
 	sprites.mushroom.hitBehaviour.skier = (mushroom, skier) => {
-		if (skier.isJumping) {
+		if (skier.isJumping && mushroom.revealedOnJump !== skier.jumpCount) {
 			skier.addStylePoints(100);
 			mushroom.deleteOnNextCycle();
 		}
 	};
+
+	// Deep snow: ploughing through it slows the skier down
+	sprites.thickSnow.hitBehaviour.skier = (snow, skier) => {
+		skier.enterDeepSnow();
+	};
+
+	// Float every bonus above the skier so it's obvious when points land
+	player.setStylePointsCb((total, delta) => {
+		if (delta > 0) {
+			game.addMovingObject(new ScorePopup(`+${delta}`, player));
+		} else if (delta < 0) {
+			game.addMovingObject(new ScorePopup(`${delta}`, player, '#d02020'));
+		}
+	});
 
 	spawnStartingSignArea();
 

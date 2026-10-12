@@ -83,8 +83,11 @@ const defaultSkierParts = {
 
 	// Row 3 (band y 74-108)
 	hit: [0, 74, 31, 35],              // sitting in the snow after a crash
-	skate1: [33, 74, 23, 35],          // 2-frame skating push (both face east)
-	skate2: [58, 74, 23, 35],
+	// Side-stepping / skating sideways when stopped (both face east)
+	skateEast1: [33, 74, 23, 35],
+	skateEast2: [58, 74, 23, 35],
+	skateWest1: mirror([33, 74, 23, 35]),
+	skateWest2: mirror([58, 74, 23, 35]),
 	tumble: [83, 74, 32, 35],          // upside down with crossed skis: bad landing
 	daffy: [117, 74, 25, 35],          // one ski forward, one back
 
@@ -134,8 +137,10 @@ const sprites = {
 				// Band y 304-344 is taller (it also holds two yeti frames), so these
 				// start at y310 to share row 3's 35px height and baseline.
 				hit: [0, 310, 31, 35],
-				skate1: [33, 310, 23, 35],
-				skate2: [58, 310, 23, 35],
+				skateEast1: [33, 310, 23, 35],
+				skateEast2: [58, 310, 23, 35],
+				skateWest1: mirror([33, 310, 23, 35]),
+				skateWest2: mirror([58, 310, 23, 35]),
 				tumble: [83, 310, 32, 35],
 				daffy: [117, 310, 25, 35],
 
@@ -384,19 +389,23 @@ const sprites = {
 			skier: rockHitsSkier
 		}
 	},
+	// Occupies z=1 too: as in the original, jumping over a stump turns it
+	// into a mushroom (see main.js)
 	stump: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
 			main: [253, 52, 16, 11]
 		},
+		zIndexesOccupied: [0, 1],
 		hitBoxes: {
-			0: [0, 2, 16, 11]
+			0: [0, 2, 16, 11],
+			1: [0, 0, 16, 11]
 		},
 		hitBehaviour: {
 			skier: rockHitsSkier
 		}
 	},
-	// Upper cluster of grey arcs: a deep-snow patch
+	// Upper cluster of grey arcs: a deep-snow patch that slows the skier
 	thickSnow: {
 		$imageFile: 'skifree-objects.png',
 		parts: {

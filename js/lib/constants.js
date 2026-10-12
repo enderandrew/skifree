@@ -11,6 +11,8 @@ export const SKIER_CRASH_RECOVERY_MS = 1500;
 export const SKIER_JUMP_DURATION_MS = 1000;
 export const SKIER_JUMP_SPEED_BONUS = 2;
 export const SKIER_TRICK_INTERVAL_MS = 300;
+export const SKIER_DEEP_SNOW_FACTOR = 0.5;   // speed multiplier while ploughing through deep snow
+export const SKIER_SKATE_FRAME_MS = 120;
 
 // Monster physics
 export const MONSTER_STANDARD_SPEED = 6;
@@ -39,7 +41,7 @@ export const SNOWBOARDER_TRICK_MS = 500;
 export const SNOWBOARDER_CRASH_MS = 2500;
 
 // Ski lift physics & layout
-export const SKI_LIFT_STANDARD_SPEED = 6;
+export const SKI_LIFT_STANDARD_SPEED = 2; // was 6: faster than the skier
 export const SKI_LIFT_COLUMN_SPACING = 1500;
 export const SKI_LIFT_TOWER_SPACING = 450;
 export const SKI_LIFT_CHAIR_SPACING = 300;

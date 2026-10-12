@@ -176,13 +176,13 @@ class Sprite {
 	getRightHitBoxEdge(zIndex = 0) {
 		const hitBox = this._getHitBox(zIndex);
 		if (hitBox) return this.canvasX + hitBox[2];
-		return this.canvasX + this.width;
+		return this.canvasX + (this.width || 0); // 0 until first drawn
 	}
 
 	getBottomHitBoxEdge(zIndex = 0) {
 		const hitBox = this._getHitBox(zIndex);
 		if (hitBox) return this.canvasY + hitBox[3];
-		return this.canvasY + this.height;
+		return this.canvasY + (this.height || 0);
 	}
 
 	getPositionInFrontOf() {
@@ -289,22 +289,18 @@ class Sprite {
 	}
 
 	hits(other) {
-		let verticalIntersect = false;
-		let horizontalIntersect = false;
 		const z = this.mapPosition[2];
 
-		if (other.getTopHitBoxEdge(z) <= this.getBottomHitBoxEdge(z) && other.getBottomHitBoxEdge(z) >= this.getBottomHitBoxEdge(z)) {
-			verticalIntersect = true;
-		}
-		if (other.getTopHitBoxEdge(z) <= this.getTopHitBoxEdge(z) && other.getBottomHitBoxEdge(z) >= this.getTopHitBoxEdge(z)) {
-			verticalIntersect = true;
-		}
-		if (other.getLeftHitBoxEdge(z) <= this.getRightHitBoxEdge(z) && other.getRightHitBoxEdge(z) >= this.getRightHitBoxEdge(z)) {
-			horizontalIntersect = true;
-		}
-		if (other.getLeftHitBoxEdge(z) <= this.getLeftHitBoxEdge(z) && other.getRightHitBoxEdge(z) >= this.getLeftHitBoxEdge(z)) {
-			horizontalIntersect = true;
-		}
+		// Standard box overlap. The old test only fired when one of this
+		// sprite's own edges fell inside the other box, so anything narrower
+		// than the skier (a mushroom, a gate pole) could sit entirely inside
+		// the skier's box and never register a hit.
+		const verticalIntersect =
+			other.getTopHitBoxEdge(z) <= this.getBottomHitBoxEdge(z) &&
+			other.getBottomHitBoxEdge(z) >= this.getTopHitBoxEdge(z);
+		const horizontalIntersect =
+			other.getLeftHitBoxEdge(z) <= this.getRightHitBoxEdge(z) &&
+			other.getRightHitBoxEdge(z) >= this.getLeftHitBoxEdge(z);
 
 		return verticalIntersect && horizontalIntersect;
 	}

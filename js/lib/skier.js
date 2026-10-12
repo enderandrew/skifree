@@ -11,6 +11,8 @@ import {
 	SKIER_CRASH_RECOVERY_MS,
 	SKIER_JUMP_DURATION_MS,
 	SKIER_JUMP_SPEED_BONUS,
+	SKIER_DEEP_SNOW_FACTOR,
+	SKIER_SKATE_FRAME_MS,
 } from './constants.js';
 
 const WALK_FRAMES = 8;
@@ -56,6 +58,10 @@ class Skier extends Sprite {
 		this._lungeFrame = 0;     // 0 = not lunging, 1-3 = lunge animation frame
 		this._lungeTimeout = null;
 		this.skin = 'default';
+		this.jumpCount = 0;        // increments every take-off; lets objects tell jumps apart
+		this._deepSnowFrames = 0;  // >0 while ploughing through deep snow
+		this._skateStep = 0;       // which of the two skating frames to show
+		this._skateUntil = 0;      // timestamp until which the skating frame shows
 
 		this.isMoving = true;
 		this.hasBeenHit = false;
@@ -122,6 +128,7 @@ class Skier extends Sprite {
 		this._somersaultStage = 0;
 		this._pendingTrickPoints = 0;
 		this._isWalkingUp = false;
+		this.jumpCount += 1;
 		this.setMapPosition(undefined, undefined, 1);
 
 		if (this._cancelableStateTimeout) clearTimeout(this._cancelableStateTimeout);
@@ -248,16 +255,41 @@ class Skier extends Sprite {
 		this.isMoving = (d !== 'west' && d !== 'east');
 	}
 
+	// Standing sideways and pressing the same way again skates across the
+	// slope, alternating the two push-off frames like the original.
+	_skate() {
+		this._isWalkingUp = false;
+		this._skateStep = (this._skateStep + 1) % 2;
+		this._skateUntil = this._now() + SKIER_SKATE_FRAME_MS * 2;
+	}
+
+	_now() {
+		return typeof performance !== 'undefined' ? performance.now() : Date.now();
+	}
+
+	isSkating() {
+		return this._now() < this._skateUntil;
+	}
+
 	stepWest() {
 		if (this.hasBeenHit) return;
-		this._isWalkingUp = false;
+		this._skate();
 		this.mapPosition[0] -= this.speed * 2;
 	}
 
 	stepEast() {
 		if (this.hasBeenHit) return;
-		this._isWalkingUp = false;
+		this._skate();
 		this.mapPosition[0] += this.speed * 2;
+	}
+
+	// Called every frame the skier overlaps a deep-snow patch
+	enterDeepSnow() {
+		this._deepSnowFrames = 2;
+	}
+
+	isInDeepSnow() {
+		return this._deepSnowFrames > 0;
 	}
 
 	stepUp() {
@@ -396,6 +428,13 @@ class Skier extends Sprite {
 	}
 
 	cycle(dt = 1) {
+		// Deep snow drags the skier down to a fraction of their speed. The
+		// patch re-arms this every frame of contact, so it wears off just
+		// after leaving the snow.
+		if (this._deepSnowFrames > 0) {
+			this._deepSnowFrames -= 1;
+			dt *= SKIER_DEEP_SNOW_FACTOR;
+		}
 		if (this.getSpeedX() <= 0 && this.getSpeedY() <= 0 && !this._isWalkingUp) {
 			this.isMoving = false;
 		}
@@ -423,6 +462,10 @@ class Skier extends Sprite {
 			if (this._isWalkingUp) {
 				const prefix = this._walkDirection === 'west' ? 'walkWest' : 'walkEast';
 				return `${prefix}${this._walkStep + 1}`;
+			}
+
+			if (this.isSkating()) {
+				return `skate${this._facing() === 'west' ? 'West' : 'East'}${this._skateStep + 1}`;
 			}
 
 			return this._getDiscreteDirection();
