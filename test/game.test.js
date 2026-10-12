@@ -28,20 +28,21 @@ function makePlayer() {
 	return player;
 }
 
+// Game constructor starts the game loop; stub it out
+vi.mock('eventedloop', () => ({
+	default: class {
+		on() {}
+		start() {}
+		stop() {}
+	}
+}));
+
 describe('Game', function() {
 	var camera, player, game;
 
 	beforeEach(function() {
 		camera = makeCamera();
 		player = makePlayer();
-		// Game constructor starts the game loop; stub it out
-		vi.mock('eventedloop', () => ({
-			default: class {
-				on() {}
-				start() {}
-				stop() {}
-			}
-		}));
 		game = new Game(camera, player);
 	});
 

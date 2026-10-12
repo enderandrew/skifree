@@ -8,6 +8,7 @@ import Game from './lib/game.js';
 import setupInput from './lib/input.js';
 import isMobileDevice from './lib/isMobileDevice.js';
 import sprites from './spriteInfo.js';
+import SkiLift, { SkiLiftManager } from './lib/skiLift.js';
 import { PIXELS_PER_METRE, MONSTER_DISTANCE_THRESHOLD } from './lib/constants.js';
 
 const mainCanvas = document.getElementById('skifree-canvas');
@@ -25,17 +26,18 @@ const state = {
 	distanceTravelled: 0,
 };
 
-function loadImages(sources, next) {
-	let loaded = 0;
-	sources.forEach(src => {
-		const im = new Image();
-		im.onload = () => {
-			loaded += 1;
-			if (loaded === sources.length) next();
-		};
-		im.src = src;
-		camera.storeLoadedImage(src, im);
-	});
+function loadImages(sources) {
+	return Promise.all(
+		sources.map(src => new Promise((resolve, reject) => {
+			const im = new Image();
+			im.onload = () => {
+				camera.storeLoadedImage(src, im);
+				resolve(im);
+			};
+			im.onerror = reject;
+			im.src = src;
+		}))
+	);
 }
 
 function monsterHitsSkierBehaviour(monster, skier) {
@@ -56,6 +58,7 @@ function startNeverEndingGame() {
 	let startSign;
 	let infoBox;
 	let game;
+	let skiLiftManager;
 
 	function resetGame() {
 		state.distanceTravelled = 0;
@@ -63,12 +66,16 @@ function startNeverEndingGame() {
 		state.highScore = Number(localStorage.getItem('highScore')) || 0;
 		game.reset();
 		game.addStaticObject(startSign);
+		skiLiftManager.reset();
 	}
 
 	function detectEnd() {
 		if (!game.isPaused()) {
-			localStorage.setItem('highScore', state.distanceTravelled);
-			state.highScore = state.distanceTravelled;
+			const finalDistance = Number(state.distanceTravelled);
+			if (finalDistance > state.highScore) {
+				state.highScore = finalDistance;
+				localStorage.setItem('highScore', String(state.highScore));
+			}
 			infoBox.setLines([
 				'Game over!',
 				'Hit space to restart',
@@ -123,7 +130,7 @@ function startNeverEndingGame() {
 
 	function tickNPCs() {
 		randomlySpawnNPC(spawnBoarder, 0.1);
-		state.distanceTravelled = parseFloat(player.getPixelsTravelledDownMountain() / PIXELS_PER_METRE).toFixed(1);
+		state.distanceTravelled = Number((player.getPixelsTravelledDownMountain() / PIXELS_PER_METRE).toFixed(1));
 		if (state.distanceTravelled > MONSTER_DISTANCE_THRESHOLD) {
 			randomlySpawnNPC(spawnMonster, 0.001);
 		}
@@ -133,9 +140,9 @@ function startNeverEndingGame() {
 		infoBox.setLines([
 			'SkiFree.js',
 			infoBoxControls,
-			`Travelled ${state.distanceTravelled}m`,
+			`Travelled ${state.distanceTravelled.toFixed(1)}m`,
 			`Skiers left: ${state.livesLeft}`,
-			`High Score: ${state.highScore}`,
+			`High Score: ${state.highScore.toFixed(1)}`,
 			'Created by Dan Hough (@basicallydan)',
 			`Current Speed: ${player.getSpeed()}`,
 		]);
@@ -146,6 +153,7 @@ function startNeverEndingGame() {
 	player.setMapPositionTarget(0, -10);
 
 	game = new Game(camera, player);
+	skiLiftManager = new SkiLiftManager({ game, camera, player, columnSpacing: 1500, baseColumnX: -250 });
 
 	startSign = new Sprite(sprites.signStart);
 	game.addStaticObject(startSign);
@@ -155,8 +163,8 @@ function startNeverEndingGame() {
 		initialLines: [
 			'SkiFree.js',
 			infoBoxControls,
-			'Travelled 0m',
-			`High Score: ${state.highScore}`,
+			'Travelled 0.0m',
+			`High Score: ${state.highScore.toFixed(1)}`,
 			`Skiers left: ${state.livesLeft}`,
 			'Created by Dan Hough (@basicallydan)',
 		],
@@ -164,7 +172,11 @@ function startNeverEndingGame() {
 	});
 
 	game.beforeCycle(() => {
-		game.addStaticObjects(spawnTerrain());
+		skiLiftManager.update();
+		const newTerrain = spawnTerrain();
+		if (newTerrain && newTerrain.length) {
+			game.addStaticObjects(newTerrain);
+		}
 		if (!game.isPaused()) {
 			tickNPCs();
 			updateHUD();
@@ -187,14 +199,10 @@ function startNeverEndingGame() {
 
 function resizeCanvas() {
 	const dpr = window.devicePixelRatio || 1;
-	// Set CSS size to logical pixels, backing store to physical pixels.
-	// All game coordinates remain in logical pixels; the scale() call below
-	// handles the mapping so every draw lands on a real screen pixel.
 	mainCanvas.style.width = `${window.innerWidth}px`;
 	mainCanvas.style.height = `${window.innerHeight}px`;
 	mainCanvas.width = Math.round(window.innerWidth * dpr);
 	mainCanvas.height = Math.round(window.innerHeight * dpr);
-	// canvas resize resets the context, so re-apply the scale and crispness.
 	camera.scale(dpr, dpr);
 	camera.imageSmoothingEnabled = false;
 }
@@ -202,4 +210,4 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas, false);
 
 resizeCanvas();
-loadImages(imageSources, startNeverEndingGame);
+loadImages(imageSources).then(startNeverEndingGame);

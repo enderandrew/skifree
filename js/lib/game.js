@@ -1,9 +1,9 @@
 import SpriteArray from './spriteArray.js';
 
-// One target frame at the legacy 50 fps rate.
+// One target frame at the legacy 50 fps rate (20ms per tick).
 // All speed values in the game are expressed in "pixels per 20 ms", so we
 // normalise every rAF delta against this constant to keep movement consistent
-// across different display refresh rates.
+// across different display refresh rates (60Hz, 120Hz, 144Hz, etc.).
 const TARGET_FRAME_MS = 20;
 
 class Game {
@@ -32,18 +32,20 @@ class Game {
 		this._staticObjects.push(sprite);
 	}
 
-	addStaticObjects(sprites) {
-		sprites.forEach(this.addStaticObject.bind(this));
+    addStaticObjects(sprites) {
+		if (!sprites || !Array.isArray(sprites)) return;
+		for (const sprite of sprites) {
+			this.addStaticObject(sprite);
+		}
 	}
 
 	addMovingObject(movingObject, movingObjectType) {
-		// Give the entity a camera reference so it can query viewport dimensions
-		// during its own cycle() without needing it passed as a parameter.
+		// Provide camera reference to allow viewport coordinate queries
 		movingObject._camera = this._camera;
 
 		if (movingObjectType) {
 			this._staticObjects.onPush(obj => {
-				if (obj.data && obj.data.hitBehaviour[movingObjectType]) {
+				if (obj.data?.hitBehaviour?.[movingObjectType]) {
 					obj.onHitting(movingObject, obj.data.hitBehaviour[movingObjectType]);
 				}
 			}, true);
@@ -73,12 +75,13 @@ class Game {
 	// ─── Game loop ────────────────────────────────────────────────────────────
 
 	_tick(timestamp) {
+		if (this._paused) return;
+
 		if (this._lastTimestamp === null) {
 			this._lastTimestamp = timestamp;
 		}
 
-		// Cap the delta at 100 ms so a long tab-switch doesn't send sprites
-		// flying across the mountain on the first frame back.
+		// Cap delta at 100 ms to prevent physics tunneling on tab switch
 		const elapsed = Math.min(timestamp - this._lastTimestamp, 100);
 		const dt = elapsed / TARGET_FRAME_MS;
 		this._lastTimestamp = timestamp;
@@ -90,22 +93,26 @@ class Game {
 	}
 
 	start() {
-		if (this._rafId) return;
+		if (this._rafId !== null) return;
+		this._paused = false;
 		this._lastTimestamp = null;
 		this._rafId = requestAnimationFrame(ts => this._tick(ts));
 	}
 
 	pause() {
 		this._paused = true;
-		if (this._rafId) {
+		if (this._rafId !== null) {
 			cancelAnimationFrame(this._rafId);
 			this._rafId = null;
 		}
 	}
 
-	isPaused() { return this._paused; }
+	isPaused() { 
+		return this._paused; 
+	}
 
 	reset() {
+		this.pause();
 		this._paused = false;
 		this._staticObjects = new SpriteArray();
 		this._movingObjects = new SpriteArray();
@@ -120,9 +127,11 @@ class Game {
 	// ─── Per-frame logic and rendering ────────────────────────────────────────
 
 	cycle(dt = 1) {
-		this._beforeCycleCallbacks.forEach(c => c());
+		for (const cb of this._beforeCycleCallbacks) {
+			cb();
+		}
 
-		var mouseMapPosition = this._camera.canvasPositionToMapPosition([this._mouseX, this._mouseY]);
+		const mouseMapPosition = this._camera.canvasPositionToMapPosition([this._mouseX, this._mouseY]);
 
 		if (!this._player.isJumping) {
 			this._player.setMapPositionTarget(mouseMapPosition[0], mouseMapPosition[1]);
@@ -141,12 +150,12 @@ class Game {
 			if (obj.cycle) obj.cycle(dt);
 		});
 
-		this._afterCycleCallbacks.forEach(c => c());
+		for (const cb of this._afterCycleCallbacks) {
+			cb();
+		}
 	}
 
 	draw() {
-		// clearRect in logical coordinates; the scale(dpr, dpr) transform applied
-		// on the context maps these to the full physical backing store.
 		this._camera.clearRect(0, 0, this._camera.logicalWidth(), this._camera.logicalHeight());
 
 		this._player.draw(this._camera);

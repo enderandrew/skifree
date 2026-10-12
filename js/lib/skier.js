@@ -14,15 +14,6 @@ import {
 	SKIER_TRICK_INTERVAL_MS,
 } from './constants.js';
 
-if (typeof navigator !== 'undefined') {
-	navigator.vibrate = navigator.vibrate ||
-		navigator.webkitVibrate ||
-		navigator.mozVibrate ||
-		navigator.msVibrate;
-} else {
-	globalThis.navigator = { vibrate: false };
-}
-
 const DISCRETE_DIRECTIONS = {
 	west:   270,
 	wsWest: 240,
@@ -39,6 +30,8 @@ class Skier extends Sprite {
 
 		this._cancelableStateTimeout = null;
 		this._cancelableStateInterval = null;
+		this._boostTimeout = null;
+		this._boostCooldownTimeout = null;
 		this._canSpeedBoost = true;
 		this._obstaclesHit = [];
 		this._pixelsTravelled = 0;
@@ -55,9 +48,20 @@ class Skier extends Sprite {
 		this.isOuching = false;
 		this.isJumping = false;
 		this.isPerformingTrick = false;
-		this.onHitObstacleCb = function() {};
+		this.onHitObstacleCb = () => {};
 
 		this.setSpeed(this._standardSpeed);
+	}
+
+	_clearTimers() {
+		if (this._cancelableStateTimeout) {
+			clearTimeout(this._cancelableStateTimeout);
+			this._cancelableStateTimeout = null;
+		}
+		if (this._cancelableStateInterval) {
+			clearInterval(this._cancelableStateInterval);
+			this._cancelableStateInterval = null;
+		}
 	}
 
 	_setNormal() {
@@ -67,7 +71,7 @@ class Skier extends Sprite {
 		this.isOuching = false;
 		this.isJumping = false;
 		this.isPerformingTrick = false;
-		if (this._cancelableStateInterval) clearInterval(this._cancelableStateInterval);
+		this._clearTimers();
 		this.setMapPosition(undefined, undefined, 0);
 	}
 
@@ -77,7 +81,7 @@ class Skier extends Sprite {
 		this.isOuching = true;
 		this.isJumping = false;
 		this.isPerformingTrick = false;
-		if (this._cancelableStateInterval) clearInterval(this._cancelableStateInterval);
+		this._clearTimers();
 		this.setMapPosition(undefined, undefined, 0);
 	}
 
@@ -87,12 +91,12 @@ class Skier extends Sprite {
 		this.isOuching = false;
 		this.isJumping = false;
 		this.isPerformingTrick = false;
-		if (this._cancelableStateInterval) clearInterval(this._cancelableStateInterval);
+		this._clearTimers();
 		this.setMapPosition(undefined, undefined, 0);
 	}
 
 	_setJumping() {
-		var currentSpeed = this.getSpeed();
+		const currentSpeed = this.getSpeed();
 		this.setSpeed(currentSpeed + SKIER_JUMP_SPEED_BONUS);
 		this.setSpeedY(currentSpeed + SKIER_JUMP_SPEED_BONUS);
 		this.isMoving = true;
@@ -113,8 +117,8 @@ class Skier extends Sprite {
 			return 'south';
 		}
 
-		var xDiff = this.movingToward[0] - this.mapPosition[0];
-		var yDiff = this.movingToward[1] - this.mapPosition[1];
+		const xDiff = this.movingToward[0] - this.mapPosition[0];
+		const yDiff = this.movingToward[1] - this.mapPosition[1];
 
 		if (yDiff <= 0) {
 			return xDiff > 0 ? 'east' : 'west';
@@ -231,7 +235,7 @@ class Skier extends Sprite {
 	}
 
 	getSpeedX() {
-		var dir = this._getDiscreteDirection();
+		const dir = this._getDiscreteDirection();
 
 		if (dir === 'esEast' || dir === 'wsWest') {
 			this._speedXFactor = 0.5;
@@ -250,7 +254,7 @@ class Skier extends Sprite {
 	}
 
 	getSpeedY() {
-		var dir = this._getDiscreteDirection();
+		const dir = this._getDiscreteDirection();
 
 		if (this.isJumping) return this._speedY;
 
@@ -306,28 +310,32 @@ class Skier extends Sprite {
 	}
 
 	hits(obs) {
-		if (this._obstaclesHit.indexOf(obs.id) !== -1) return false;
+		if (this._obstaclesHit.includes(obs.id)) return false;
 		if (!obs.occupiesZIndex(this.mapPosition[2])) return false;
 		return super.hits(obs);
 	}
 
 	speedBoost() {
-		var originalSpeed = this.speed;
-		if (this._canSpeedBoost) {
-			this._canSpeedBoost = false;
-			this.setSpeed(this.speed * SKIER_BOOST_MULTIPLIER);
-			setTimeout(() => {
-				this.setSpeed(originalSpeed);
-				setTimeout(() => {
-					this._canSpeedBoost = true;
-				}, SKIER_BOOST_COOLDOWN_MS);
-			}, SKIER_BOOST_DURATION_MS);
-		}
+		if (!this._canSpeedBoost) return;
+
+		const originalSpeed = this.speed;
+		this._canSpeedBoost = false;
+		this.setSpeed(this.speed * SKIER_BOOST_MULTIPLIER);
+
+		this._boostTimeout = setTimeout(() => {
+			this.setSpeed(originalSpeed);
+			this._boostCooldownTimeout = setTimeout(() => {
+				this._canSpeedBoost = true;
+			}, SKIER_BOOST_COOLDOWN_MS);
+		}, SKIER_BOOST_DURATION_MS);
 	}
 
 	attemptTrick() {
 		if (this.isJumping) {
 			this.isPerformingTrick = true;
+			if (this._cancelableStateInterval) {
+				clearInterval(this._cancelableStateInterval);
+			}
 			this._cancelableStateInterval = setInterval(() => {
 				this._trickStep = this._trickStep >= 2 ? 0 : this._trickStep + 1;
 			}, SKIER_TRICK_INTERVAL_MS);
@@ -337,8 +345,8 @@ class Skier extends Sprite {
 	hasHitObstacle(obs) {
 		this._setOuching();
 
-		if (navigator.vibrate) {
-			navigator.vibrate(500);
+		if (typeof navigator !== 'undefined') {
+			navigator.vibrate?.(500);
 		}
 
 		this._obstaclesHit.push(obs.id);
@@ -348,7 +356,10 @@ class Skier extends Sprite {
 		if (this._cancelableStateTimeout) clearTimeout(this._cancelableStateTimeout);
 		this._cancelableStateTimeout = setTimeout(() => {
 			this._setCrashed();
-			this._cancelableStateTimeout = setTimeout(() => this._setNormal(), SKIER_CRASH_RECOVERY_MS - SKIER_OUCH_DURATION_MS);
+			this._cancelableStateTimeout = setTimeout(
+				() => this._setNormal(),
+				SKIER_CRASH_RECOVERY_MS - SKIER_OUCH_DURATION_MS
+			);
 		}, SKIER_OUCH_DURATION_MS);
 	}
 
@@ -369,17 +380,24 @@ class Skier extends Sprite {
 	}
 
 	reset() {
+		this._clearTimers();
+		if (this._boostTimeout) clearTimeout(this._boostTimeout);
+		if (this._boostCooldownTimeout) clearTimeout(this._boostCooldownTimeout);
+
 		this._obstaclesHit = [];
 		this._pixelsTravelled = 0;
 		this.isMoving = true;
 		this.isJumping = false;
 		this.hasBeenHit = false;
 		this.isOuching = false;
+		this.isBeingEaten = false;
+		this.isPerformingTrick = false;
 		this._canSpeedBoost = true;
+		this.resetSpeed();
 	}
 
 	setHitObstacleCb(fn) {
-		this.onHitObstacleCb = fn || function() {};
+		this.onHitObstacleCb = fn || (() => {});
 	}
 }
 

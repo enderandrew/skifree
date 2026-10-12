@@ -20,8 +20,12 @@ export const MONSTER_EATING_STAGES = 6;
 // Snowboarder physics
 export const SNOWBOARDER_STANDARD_SPEED = 3;
 
-// Ski lift
+// Ski lift physics & layout
 export const SKI_LIFT_STANDARD_SPEED = 6;
+export const SKI_LIFT_COLUMN_SPACING = 1500;
+export const SKI_LIFT_TOWER_SPACING = 450;
+export const SKI_LIFT_CHAIR_SPACING = 300;
+export const SKI_LIFT_BASE_COLUMN_X = -250;
 
 // Game world
 export const PIXELS_PER_METRE = 18;

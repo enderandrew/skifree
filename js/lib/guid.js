@@ -1,18 +1,14 @@
-// Creates a random ID string
+// Creates a unique ID string using standard crypto API
 function guid() {
-    var S4 = function () {
-        return Math.floor(
-                Math.random() * 0x10000 /* 65536 */
-            ).toString(16);
-    };
-
-    return (
-            S4() + S4() + "-" +
-            S4() + "-" +
-            S4() + "-" +
-            S4() + "-" +
-            S4() + S4() + S4()
-        );
+	if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+		return crypto.randomUUID();
+	}
+	// Fallback for older headless test environments without crypto.randomUUID
+	return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+		const r = Math.random() * 16 | 0;
+		const v = c === 'x' ? r : (r & 0x3 | 0x8);
+		return v.toString(16);
+	});
 }
 
 export default guid;

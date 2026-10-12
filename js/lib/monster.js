@@ -6,6 +6,7 @@ class Monster extends Sprite {
 		super(data);
 		this._spriteVersion = 1;
 		this._eatingStage = 0;
+		this._eatingTimeout = null;
 
 		this.isEating = false;
 		this.isFull = false;
@@ -14,10 +15,11 @@ class Monster extends Sprite {
 
 	draw(dContext) {
 		const spritePartToUse = () => {
-			var xDiff = this.movingToward[0] - this.canvasX;
+			const targetX = this.movingToward ? this.movingToward[0] : this.canvasX;
+			const xDiff = targetX - this.canvasX;
 
 			if (this.isEating) {
-				return 'eating' + this._eatingStage;
+				return `eating${this._eatingStage}`;
 			}
 
 			if (this._spriteVersion + 0.1 > 2) {
@@ -26,9 +28,9 @@ class Monster extends Sprite {
 				this._spriteVersion += 0.1;
 			}
 
-			return xDiff >= 0
-				? 'sEast' + Math.ceil(this._spriteVersion)
-				: 'sWest' + Math.ceil(this._spriteVersion);
+			// Clamp strictly to 1 or 2 to prevent missing sprite frame lookups
+			const frameIndex = Math.min(2, Math.max(1, Math.ceil(this._spriteVersion)));
+			return (xDiff >= 0 ? 'sEast' : 'sWest') + frameIndex;
 		};
 
 		return super.draw(dContext, spritePartToUse());
@@ -38,12 +40,18 @@ class Monster extends Sprite {
 		this._eatingStage += 1;
 		this.isEating = true;
 		this.isMoving = false;
+
+		if (this._eatingTimeout) {
+			clearTimeout(this._eatingTimeout);
+		}
+
 		if (this._eatingStage < MONSTER_EATING_STAGES) {
-			setTimeout(() => this.startEating(whenDone), MONSTER_EATING_INTERVAL_MS);
+			this._eatingTimeout = setTimeout(() => this.startEating(whenDone), MONSTER_EATING_INTERVAL_MS);
 		} else {
 			this._eatingStage = 0;
 			this.isEating = false;
 			this.isMoving = true;
+			this._eatingTimeout = null;
 			whenDone();
 		}
 	}

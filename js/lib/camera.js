@@ -9,12 +9,12 @@ class Camera {
 	// All game coordinate calculations must use these so that world coordinates
 	// stay in logical pixels regardless of the backing-store scale.
 	logicalWidth() {
-		const styleWidth = this._ctx.canvas.style.width;
+		const styleWidth = this._ctx.canvas.style?.width;
 		return styleWidth ? parseFloat(styleWidth) : this._ctx.canvas.width;
 	}
 
 	logicalHeight() {
-		const styleHeight = this._ctx.canvas.style.height;
+		const styleHeight = this._ctx.canvas.style?.height;
 		return styleHeight ? parseFloat(styleHeight) : this._ctx.canvas.height;
 	}
 
@@ -32,7 +32,7 @@ class Camera {
 
 	getCentralPosition() {
 		return {
-			map: this._centralSprite.mapPosition,
+			map: this._centralSprite?.mapPosition ?? [0, 0, 0],
 			canvas: [
 				Math.round(this.logicalWidth() * 0.5),
 				Math.round(this.logicalHeight() * 0.5),
@@ -42,16 +42,16 @@ class Camera {
 	}
 
 	mapPositionToCanvasPosition(position) {
-		var central = this.getCentralPosition();
-		var mapDifferenceX = central.map[0] - position[0];
-		var mapDifferenceY = central.map[1] - position[1];
+		const central = this.getCentralPosition();
+		const mapDifferenceX = central.map[0] - position[0];
+		const mapDifferenceY = central.map[1] - position[1];
 		return [central.canvas[0] - mapDifferenceX, central.canvas[1] - mapDifferenceY];
 	}
 
 	canvasPositionToMapPosition(position) {
-		var central = this.getCentralPosition();
-		var mapDifferenceX = central.canvas[0] - position[0];
-		var mapDifferenceY = central.canvas[1] - position[1];
+		const central = this.getCentralPosition();
+		const mapDifferenceX = central.canvas[0] - position[0];
+		const mapDifferenceY = central.canvas[1] - position[1];
 		return [central.map[0] - mapDifferenceX, central.map[1] - mapDifferenceY];
 	}
 
@@ -68,42 +68,38 @@ class Camera {
 	}
 
 	getMapBelowViewport() {
-		var below = this.getBelowViewport();
+		const below = this.getBelowViewport();
 		return this.canvasPositionToMapPosition([0, below])[1];
 	}
 
 	getAboveViewport() {
-		return 0 - Math.floor(this.logicalHeight() / 4);
+		return -Math.floor(this.logicalHeight() / 4);
 	}
 
 	getTopOfViewport() {
 		return this.canvasPositionToMapPosition([0, 0])[1];
 	}
 
-	getRandomlyInTheCentreOfCanvas(buffer) {
-		var min = 0;
-		var max = this.logicalWidth();
-		if (buffer) {
-			min -= buffer;
-			max += buffer;
-		}
+	getRandomlyInTheCentreOfCanvas(buffer = 0) {
+		const min = -buffer;
+		const max = this.logicalWidth() + buffer;
 		return Math.floor(Math.random() * (max - min + 1)) + min;
 	}
 
-	getRandomlyInTheCentreOfMap(buffer) {
-		var random = this.getRandomlyInTheCentreOfCanvas(buffer);
+	getRandomlyInTheCentreOfMap(buffer = 0) {
+		const random = this.getRandomlyInTheCentreOfCanvas(buffer);
 		return this.canvasPositionToMapPosition([random, 0])[0];
 	}
 
 	getRandomMapPositionBelowViewport() {
-		var xCanvas = this.getRandomlyInTheCentreOfCanvas();
-		var yCanvas = this.getBelowViewport();
+		const xCanvas = this.getRandomlyInTheCentreOfCanvas();
+		const yCanvas = this.getBelowViewport();
 		return this.canvasPositionToMapPosition([xCanvas, yCanvas]);
 	}
 
 	getRandomMapPositionAboveViewport() {
-		var xCanvas = this.getRandomlyInTheCentreOfCanvas();
-		var yCanvas = this.getAboveViewport();
+		const xCanvas = this.getRandomlyInTheCentreOfCanvas();
+		const yCanvas = this.getAboveViewport();
 		return this.canvasPositionToMapPosition([xCanvas, yCanvas]);
 	}
 
@@ -119,8 +115,7 @@ class Camera {
 					return typeof val === 'function' ? val.bind(target) : val;
 				}
 				const ctxVal = ctx[prop];
-				if (typeof ctxVal === 'function') return ctxVal.bind(ctx);
-				return ctxVal;
+				return typeof ctxVal === 'function' ? ctxVal.bind(ctx) : ctxVal;
 			},
 			set(target, prop, value) {
 				if (prop in target) {

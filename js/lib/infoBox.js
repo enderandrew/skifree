@@ -15,28 +15,31 @@ class InfoBox {
 
 	draw(dContext) {
 		dContext.font = '11px monospace';
-		var yOffset = 0;
-		this.lines.forEach(line => {
-			var fontSize = +dContext.font.slice(0, 2);
-			var textWidth = dContext.measureText(line).width;
-			var textHeight = fontSize * 1.5;
-			var xPos, yPos;
+		const fontSizeMatch = dContext.font.match(/(\d+)px/);
+		const fontSize = fontSizeMatch ? Number(fontSizeMatch[1]) : 11;
+		const textHeight = fontSize * 1.5;
 
-			if (this.top) {
+		let yOffset = 0;
+		for (const line of this.lines) {
+			const textWidth = dContext.measureText(line).width;
+			let xPos = 0;
+			let yPos = 0;
+
+			if (this.top !== undefined) {
 				yPos = this.top + yOffset;
-			} else if (this.bottom) {
+			} else if (this.bottom !== undefined) {
 				yPos = dContext.logicalHeight() - this.bottom - textHeight + yOffset;
 			}
 
-			if (this.right) {
+			if (this.right !== undefined) {
 				xPos = dContext.logicalWidth() - this.right - textWidth;
-			} else if (this.left) {
+			} else if (this.left !== undefined) {
 				xPos = this.left;
 			}
 
 			yOffset += textHeight;
 			dContext.fillText(line, xPos, yPos);
-		});
+		}
 	}
 }
 

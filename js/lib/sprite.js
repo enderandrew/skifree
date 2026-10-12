@@ -28,11 +28,11 @@ class Sprite {
 		this.maxHeight = heights.length ? Math.max(...heights) : undefined;
 		this.isMoving = true;
 
-		if (data && data.id) {
+		if (data?.id) {
 			this.id = data.id;
 		}
 
-		if (data && data.zIndexesOccupied) {
+		if (data?.zIndexesOccupied) {
 			this._zIndexesOccupied = data.zIndexesOccupied;
 		}
 	}
@@ -46,32 +46,28 @@ class Sprite {
 	}
 
 	_getHitBox(forZIndex) {
-		if (this.data.hitBoxes && this.data.hitBoxes[forZIndex]) {
-			return this.data.hitBoxes[forZIndex];
-		}
+		return this.data.hitBoxes?.[forZIndex];
 	}
 
 	_roundHalf(num) {
 		return Math.round(num * 2) / 2;
 	}
 
-	// dt is a frame-time multiplier (1.0 = one target frame of 20ms).
-	// Multiply all movement by dt so speed stays consistent across frame rates.
 	_move(dt = 1) {
 		if (!this.isMoving) {
 			return;
 		}
 
-		var currentX = this.mapPosition[0];
-		var currentY = this.mapPosition[1];
+		let currentX = this.mapPosition[0];
+		let currentY = this.mapPosition[1];
 
-		if (typeof this.direction !== 'undefined') {
-			var d = this.direction - 90;
+		if (this.direction !== undefined) {
+			let d = this.direction - 90;
 			if (d < 0) d = 360 + d;
 			currentX += this._roundHalf(this.speed * dt * Math.cos(d * (Math.PI / 180)));
 			currentY += this._roundHalf(this.speed * dt * Math.sin(d * (Math.PI / 180)));
 		} else {
-			if (typeof this.movingToward[0] !== 'undefined') {
+			if (this.movingToward?.[0] !== undefined) {
 				if (currentX > this.movingToward[0]) {
 					currentX -= Math.min(this.getSpeedX() * dt, Math.abs(currentX - this.movingToward[0]));
 				} else if (currentX < this.movingToward[0]) {
@@ -79,7 +75,7 @@ class Sprite {
 				}
 			}
 
-			if (typeof this.movingToward[1] !== 'undefined') {
+			if (this.movingToward?.[1] !== undefined) {
 				if (currentY > this.movingToward[1]) {
 					currentY -= Math.min(this.getSpeedY() * dt, Math.abs(currentY - this.movingToward[1]));
 				} else if (currentY < this.movingToward[1]) {
@@ -92,20 +88,24 @@ class Sprite {
 	}
 
 	draw(dCtx, spriteFrame) {
-		var fr = this.data.parts[spriteFrame];
+		const fr = this.data.parts[spriteFrame];
 		this.height = fr[3];
 		this.width = fr[2];
 
-		var newCanvasPosition = dCtx.mapPositionToCanvasPosition(this.mapPosition);
+		const newCanvasPosition = dCtx.mapPositionToCanvasPosition(this.mapPosition);
 		this.setCanvasPosition(newCanvasPosition[0], newCanvasPosition[1]);
 
-		dCtx.drawImage(dCtx.getLoadedImage(this.data.$imageFile), fr[0], fr[1], fr[2], fr[3], this.canvasX, this.canvasY, fr[2], fr[3]);
+		dCtx.drawImage(
+			dCtx.getLoadedImage(this.data.$imageFile),
+			fr[0], fr[1], fr[2], fr[3],
+			this.canvasX, this.canvasY, fr[2], fr[3]
+		);
 	}
 
 	setMapPosition(x, y, z) {
-		if (typeof x === 'undefined') x = this.mapPosition[0];
-		if (typeof y === 'undefined') y = this.mapPosition[1];
-		if (typeof z === 'undefined') {
+		if (x === undefined) x = this.mapPosition[0];
+		if (y === undefined) y = this.mapPosition[1];
+		if (z === undefined) {
 			z = this.mapPosition[2];
 		} else {
 			this._zIndexesOccupied = [z];
@@ -114,42 +114,48 @@ class Sprite {
 	}
 
 	setCanvasPosition(cx, cy) {
-		if (cx) {
-			if (typeof cx === 'string' && (cx[0] === '+' || cx[0] === '-')) this._incrementX(cx);
-			else this.canvasX = cx;
+		if (cx !== undefined && cx !== null) {
+			if (typeof cx === 'string' && (cx[0] === '+' || cx[0] === '-')) {
+				this._incrementX(cx);
+			} else {
+				this.canvasX = cx;
+			}
 		}
-		if (cy) {
-			if (typeof cy === 'string' && (cy[0] === '+' || cy[0] === '-')) this._incrementY(cy);
-			else this.canvasY = cy;
+		if (cy !== undefined && cy !== null) {
+			if (typeof cy === 'string' && (cy[0] === '+' || cy[0] === '-')) {
+				this._incrementY(cy);
+			} else {
+				this.canvasY = cy;
+			}
 		}
 	}
 
 	getCanvasPositionX() { return this.canvasX; }
 	getCanvasPositionY() { return this.canvasY; }
 
-	getLeftHitBoxEdge(zIndex) {
-		zIndex = zIndex || 0;
-		var lhbe = this.getCanvasPositionX();
-		if (this._getHitBox(zIndex)) lhbe += this._getHitBox(zIndex)[0];
+	getLeftHitBoxEdge(zIndex = 0) {
+		let lhbe = this.getCanvasPositionX();
+		const hitBox = this._getHitBox(zIndex);
+		if (hitBox) lhbe += hitBox[0];
 		return lhbe;
 	}
 
-	getTopHitBoxEdge(zIndex) {
-		zIndex = zIndex || 0;
-		var thbe = this.getCanvasPositionY();
-		if (this._getHitBox(zIndex)) thbe += this._getHitBox(zIndex)[1];
+	getTopHitBoxEdge(zIndex = 0) {
+		let thbe = this.getCanvasPositionY();
+		const hitBox = this._getHitBox(zIndex);
+		if (hitBox) thbe += hitBox[1];
 		return thbe;
 	}
 
-	getRightHitBoxEdge(zIndex) {
-		zIndex = zIndex || 0;
-		if (this._getHitBox(zIndex)) return this.canvasX + this._getHitBox(zIndex)[2];
+	getRightHitBoxEdge(zIndex = 0) {
+		const hitBox = this._getHitBox(zIndex);
+		if (hitBox) return this.canvasX + hitBox[2];
 		return this.canvasX + this.width;
 	}
 
-	getBottomHitBoxEdge(zIndex) {
-		zIndex = zIndex || 0;
-		if (this._getHitBox(zIndex)) return this.canvasY + this._getHitBox(zIndex)[3];
+	getBottomHitBoxEdge(zIndex = 0) {
+		const hitBox = this._getHitBox(zIndex);
+		if (hitBox) return this.canvasY + hitBox[3];
 		return this.canvasY + this.height;
 	}
 
@@ -176,16 +182,15 @@ class Sprite {
 	getMaxHeight() { return this.maxHeight; }
 
 	checkHittableObjects() {
-		Object.keys(this._hittableObjects).forEach(k => {
-			var objectData = this._hittableObjects[k];
+		for (const [key, objectData] of Object.entries(this._hittableObjects)) {
 			if (objectData.object.deleted) {
-				delete this._hittableObjects[k];
-			} else {
-				if (objectData.object.hits(this)) {
-					objectData.callbacks.forEach(callback => callback(this, objectData.object));
+				delete this._hittableObjects[key];
+			} else if (objectData.object.hits(this)) {
+				for (const callback of objectData.callbacks) {
+					callback(this, objectData.object);
 				}
 			}
-		});
+		}
 	}
 
 	cycle(dt = 1) {
@@ -208,8 +213,8 @@ class Sprite {
 		}
 
 		if (!this.movingWithConviction) {
-			if (typeof x === 'undefined') x = this.movingToward[0];
-			if (typeof y === 'undefined') y = this.movingToward[1];
+			if (x === undefined) x = this.movingToward[0];
+			if (y === undefined) y = this.movingToward[1];
 			this.movingToward = [x, y];
 			this.movingWithConviction = false;
 		}
@@ -240,7 +245,8 @@ class Sprite {
 
 	onHitting(objectToHit, callback) {
 		if (this._hittableObjects[objectToHit.id]) {
-			return this._hittableObjects[objectToHit.id].callbacks.push(callback);
+			this._hittableObjects[objectToHit.id].callbacks.push(callback);
+			return;
 		}
 		this._hittableObjects[objectToHit.id] = {
 			object: objectToHit,
@@ -253,13 +259,13 @@ class Sprite {
 	}
 
 	occupiesZIndex(z) {
-		return this._zIndexesOccupied.indexOf(z) >= 0;
+		return this._zIndexesOccupied.includes(z);
 	}
 
 	hits(other) {
-		var verticalIntersect = false;
-		var horizontalIntersect = false;
-		var z = this.mapPosition[2];
+		let verticalIntersect = false;
+		let horizontalIntersect = false;
+		const z = this.mapPosition[2];
 
 		if (other.getTopHitBoxEdge(z) <= this.getBottomHitBoxEdge(z) && other.getBottomHitBoxEdge(z) >= this.getBottomHitBoxEdge(z)) {
 			verticalIntersect = true;
@@ -285,31 +291,28 @@ class Sprite {
 		return this.canvasY > cy;
 	}
 
-	static createObjects(spriteInfoArray, opts) {
-		if (!Array.isArray(spriteInfoArray)) spriteInfoArray = [spriteInfoArray];
-		opts = Object.assign({ rateModifier: 0, dropRate: 1, position: [0, 0] }, opts);
+	static createObjects(spriteInfoArray, opts = {}) {
+		const items = Array.isArray(spriteInfoArray) ? spriteInfoArray : [spriteInfoArray];
+		const config = { rateModifier: 0, dropRate: 1, position: [0, 0], ...opts };
 
-		function createOne(spriteInfo) {
-			var position = opts.position;
-			if (Math.floor(Math.random() * (101 + opts.rateModifier)) <= spriteInfo.dropRate) {
-				var sprite = new Sprite(spriteInfo.sprite);
+		return items
+			.filter(info => {
+				const rate = info.dropRate ?? config.dropRate;
+				return Math.floor(Math.random() * (101 + config.rateModifier)) <= rate;
+			})
+			.map(info => {
+				const sprite = new Sprite(info.sprite);
 				sprite.setSpeed(0);
 
-				if (typeof position === 'function') {
-					position = position();
-				}
+				const pos = typeof config.position === 'function' ? config.position() : config.position;
+				sprite.setMapPosition(pos[0], pos[1]);
 
-				sprite.setMapPosition(position[0], position[1]);
-
-				if (spriteInfo.sprite.hitBehaviour && spriteInfo.sprite.hitBehaviour.skier && opts.player) {
-					sprite.onHitting(opts.player, spriteInfo.sprite.hitBehaviour.skier);
+				if (info.sprite?.hitBehaviour?.skier && config.player) {
+					sprite.onHitting(config.player, info.sprite.hitBehaviour.skier);
 				}
 
 				return sprite;
-			}
-		}
-
-		return spriteInfoArray.map(createOne).filter(x => x !== undefined);
+			});
 	}
 }
 
