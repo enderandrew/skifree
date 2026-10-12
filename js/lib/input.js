@@ -2,7 +2,13 @@ export default function setupInput({
 	player, game, canvas, camera,
 	spawnMonster, spawnBoarder, spawnDog = () => {}, spawnNoviceSkier = () => {},
 	playerLunge = () => {}, toggleSkin = () => {}, resetGame,
+	konami = null,
 }) {
+	const KONAMI_KEYS = {
+		ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+		KeyB: 'b', KeyA: 'a',
+	};
+
 	canvas.style.touchAction = 'none';
 
 	const executeJumpOrTrick = () => {
@@ -107,6 +113,16 @@ export default function setupInput({
 		if (['Space', 'Insert', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
 			e.preventDefault();
 		}
+		// Held-key auto-repeat still steers and walks, but only a real
+		// press counts towards the Konami code
+		if (konami && !e.repeat) {
+			// While the code is waiting for B then A, those keys only count
+			// towards the code (no snowboarder spawn, no step left).
+			const isButton = e.code === 'KeyB' || e.code === 'KeyA';
+			const swallow = isButton && konami.expectsButton();
+			konami.feed(KONAMI_KEYS[e.code] ?? 'other');
+			if (swallow) return;
+		}
 
 		switch (e.code) {
 			// Left
@@ -206,7 +222,13 @@ export default function setupInput({
 		let anyJumpPressed = false;
 		for (const idx of jumpButtons) {
 			if (gp.buttons[idx] && isButtonPressed(gp.buttons[idx])) {
-				if (!prev[`btn${idx}`]) anyJumpPressed = true;
+				if (!prev[`btn${idx}`]) {
+					// Standard mapping: button 1 (right face) is B, button 0 (bottom face) is A
+					const token = idx === 1 ? 'b' : idx === 0 ? 'a' : 'other';
+					const swallow = konami && token !== 'other' && konami.expectsButton();
+					konami?.feed(token);
+					if (!swallow) anyJumpPressed = true;
+				}
 				current[`btn${idx}`] = true;
 			}
 		}
@@ -226,10 +248,10 @@ export default function setupInput({
 		const dpadLeft = isButtonPressed(gp.buttons[14]);
 		const dpadRight = isButtonPressed(gp.buttons[15]);
 
-		if (dpadUp && !prev.dpadUp) handleUp();
-		if (dpadDown && !prev.dpadDown) handleDown();
-		if (dpadLeft && !prev.dpadLeft) handleLeft();
-		if (dpadRight && !prev.dpadRight) handleRight();
+		if (dpadUp && !prev.dpadUp) { konami?.feed('up'); handleUp(); }
+		if (dpadDown && !prev.dpadDown) { konami?.feed('down'); handleDown(); }
+		if (dpadLeft && !prev.dpadLeft) { konami?.feed('left'); handleLeft(); }
+		if (dpadRight && !prev.dpadRight) { konami?.feed('right'); handleRight(); }
 
 		current.dpadUp = dpadUp;
 		current.dpadDown = dpadDown;

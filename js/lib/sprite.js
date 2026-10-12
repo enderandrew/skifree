@@ -45,8 +45,17 @@ class Sprite {
 		this.canvasY += parseFloat(amount);
 	}
 
+	// data.scale (default 1) enlarges how a sprite is drawn. Hit boxes are
+	// written in unscaled sheet pixels, so they are scaled to match here.
+	_scale() {
+		return this.data.scale || 1;
+	}
+
 	_getHitBox(forZIndex) {
-		return this.data.hitBoxes?.[forZIndex];
+		const box = this.data.hitBoxes?.[forZIndex];
+		const scale = this._scale();
+		if (!box || scale === 1) return box;
+		return box.map(v => v * scale);
 	}
 
 	_roundHalf(num) {
@@ -91,8 +100,11 @@ class Sprite {
 		const fr = this.data.parts[spriteFrame];
 		if (!fr) return;
 	
-		this.height = fr[3];
-		this.width = fr[2];
+		const scale = this._scale();
+		const drawW = fr[2] * scale;
+		const drawH = fr[3] * scale;
+		this.height = drawH;
+		this.width = drawW;
 	
 		const newCanvasPosition = dCtx.mapPositionToCanvasPosition(this.mapPosition);
 		this.setCanvasPosition(newCanvasPosition[0], newCanvasPosition[1]);
@@ -114,9 +126,9 @@ class Sprite {
 		// A fifth element of `true` draws the region mirrored horizontally
 		if (fr[4]) {
 			dCtx.save();
-			dCtx.translate(this.canvasX + fr[2], this.canvasY);
+			dCtx.translate(this.canvasX + drawW, this.canvasY);
 			dCtx.scale(-1, 1);
-			dCtx.drawImage(image, fr[0], fr[1], fr[2], fr[3], 0, 0, fr[2], fr[3]);
+			dCtx.drawImage(image, fr[0], fr[1], fr[2], fr[3], 0, 0, drawW, drawH);
 			dCtx.restore();
 			return;
 		}
@@ -124,7 +136,7 @@ class Sprite {
 		dCtx.drawImage(
 			image,
 			fr[0], fr[1], fr[2], fr[3],
-			this.canvasX, this.canvasY, fr[2], fr[3]
+			this.canvasX, this.canvasY, drawW, drawH
 		);
 	}
 

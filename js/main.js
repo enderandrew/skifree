@@ -9,6 +9,10 @@ import Wind from './lib/wind.js';
 import WindSound from './lib/windSound.js';
 import Snow from './lib/snow.js';
 import { fitCanvasToWindow, watchViewport } from './lib/viewport.js';
+import SoundBank from './lib/sounds.js';
+import KonamiCode from './lib/konami.js';
+import Ufo from './lib/ufo.js';
+import { makeTintedSheet } from './lib/recolor.js';
 import Skier from './lib/skier.js';
 import InfoBox from './lib/infoBox.js';
 import Game from './lib/game.js';
@@ -23,11 +27,21 @@ import {
 	MONSTER_STRIKE_REACH_X,
 	MONSTER_STRIKE_REACH_Y,
 	MONSTER_KNOCKOUT_POINTS,
+	KONAMI_LIVES,
+	UFO_CHANCE_PER_SECOND,
 } from './lib/constants.js';
 
 const mainCanvas = document.getElementById('skifree-canvas');
 const snow = new Snow();
 const windSound = new WindSound('wind.mp3');
+const sounds = new SoundBank();
+sounds.preload();
+
+// Which crashes count as hitting a tree (for tree.mp3)
+const TREE_SPRITES = new Set([
+	sprites.smallTree, sprites.tallTree, sprites.deadTree, sprites.burningTree,
+	sprites.decoratedTree, sprites.decoratedTree2,
+]);
 const camera = Camera.create(mainCanvas.getContext('2d'));
 const imageSources = ['sprite-characters.png', 'skifree-objects.png'];
 const infoBoxControls = isMobileDevice()
@@ -58,21 +72,49 @@ const state = {
 	distanceTravelled: 0,
 };
 
+function loadImage(src) {
+	return new Promise((resolve, reject) => {
+		const im = new Image();
+		im.onload = () => {
+			camera.storeLoadedImage(src, im);
+			resolve(im);
+		};
+		im.onerror = reject;
+		im.src = src;
+	});
+}
+
 function loadImages(sources) {
-	return Promise.all(
-		sources.map(src => new Promise((resolve, reject) => {
-			const im = new Image();
-			im.onload = () => {
-				camera.storeLoadedImage(src, im);
-				resolve(im);
-			};
-			im.onerror = reject;
-			im.src = src;
-		}))
-	);
+	return Promise.all(sources.map(loadImage));
+}
+
+// Images the game can run without. A missing file just disables its feature.
+function loadOptionalImages() {
+	const makeCanvas = (w, h) => {
+		const c = document.createElement('canvas');
+		c.width = w;
+		c.height = h;
+		return c;
+	};
+
+	// Bigfoot: a brown copy of the character sheet. If pixels can't be read
+	// back, Bigfoot is drawn from the normal sheet (grey, but still bigger).
+	const sheet = camera.getLoadedImage('sprite-characters.png');
+	camera.storeLoadedImage(sprites.bigfoot.$imageFile, makeTintedSheet(sheet, makeCanvas) || sheet);
+
+	return loadImage('ufo.png').then(im => {
+		const w = im.naturalWidth || im.width;
+		const h = im.naturalHeight || im.height;
+		sprites.ufo.parts.main = [0, 0, w, h];
+		// Inset the hit box a little so grazing the edge of the saucer is a miss
+		sprites.ufo.hitBoxes[1] = [Math.round(w * 0.1), Math.round(h * 0.2), Math.round(w * 0.9), Math.round(h * 0.9)];
+	}, () => {
+		// no ufo.png: no UFOs
+	});
 }
 
 function monsterHitsSkierBehaviour(monster, skier) {
+	sounds.play('yummy');
 	skier.isEatenBy(monster, () => {
 		state.livesLeft -= 1;
 		monster.isFull = true;
@@ -102,6 +144,7 @@ function startNeverEndingGame() {
 		game.reset();
 		monsters = [];
 		wind.reset();
+		if (currentUfo) currentUfo.deleteOnNextCycle();
 		game.addStaticObject(startSign);
 		skiLiftManager.reset();
 		slalomCourse.reset();
@@ -155,6 +198,44 @@ function startNeverEndingGame() {
 		monsters.push(newMonster);
 	}
 
+	// Killing a yeti summons Bigfoot from off-screen. He can't be killed.
+	function spawnBigfoot() {
+		const bigfoot = new Monster(sprites.bigfoot);
+		const pos = camera.getRandomMapPositionAboveViewport();
+		bigfoot.setMapPosition(pos[0], pos[1] - 200); // a little further out than a yeti
+		bigfoot.follow(player);
+		bigfoot.setSpeed(player.getStandardSpeed());
+		bigfoot.onHitting(player, monsterHitsSkierBehaviour);
+		game.addMovingObject(bigfoot, 'monster');
+		monsters.push(bigfoot);
+		sounds.play('bigfoot');
+	}
+
+	// Each second of play there's a 1 in 200 chance a UFO crosses the screen
+	let currentUfo = null;
+	const ufoSpawner = {
+		_ms: 0,
+		cycle(dt = 1) {
+			if (!sprites.ufo.parts.main[2]) return; // ufo.png never loaded
+			this._ms += dt * 20;
+			while (this._ms >= 1000) {
+				this._ms -= 1000;
+				if ((!currentUfo || currentUfo.deleted) && Math.random() < UFO_CHANCE_PER_SECOND) {
+					spawnUfo();
+				}
+			}
+		},
+		draw() {},
+	};
+
+	function spawnUfo() {
+		currentUfo = new Ufo(sprites.ufo, { camera });
+		currentUfo.onHitting(player, sprites.ufo.hitBehaviour.skier);
+		// A UI element so it draws above the trees, like something in the sky
+		game.addUIElement(currentUfo);
+		sounds.play('spooky');
+	}
+
 	function spawnBoarder() {
 		const newBoarder = new Snowboarder(sprites.snowboarder);
 		const randomPositionAbove = camera.getRandomMapPositionAboveViewport();
@@ -204,7 +285,7 @@ function startNeverEndingGame() {
 		if (!player.isStriking()) return;
 		const facingWest = player._facing() === 'west';
 		for (const monster of monsters) {
-			if (monster.deleted || monster.isKnockedOut() || monster.isEating) continue;
+			if (monster.deleted || monster.unkillable || monster.isKnockedOut() || monster.isEating) continue;
 			const dx = monster.mapPosition[0] - player.mapPosition[0];
 			const dy = monster.mapPosition[1] - player.mapPosition[1];
 			const inFront = facingWest ? dx <= 8 : dx >= -8;
@@ -212,6 +293,7 @@ function startNeverEndingGame() {
 				&& dy >= -MONSTER_STRIKE_REACH_Y && dy <= MONSTER_STRIKE_REACH_Y;
 			if (inFront && inReach && monster.getStabbed(player)) {
 				player.addStylePoints(MONSTER_KNOCKOUT_POINTS);
+				spawnBigfoot();
 				return;
 			}
 		}
@@ -339,6 +421,7 @@ function startNeverEndingGame() {
 	// Moguls: Give the skier a mini-jump / hop when skied over
 	const mogulHop = (mogul, skier) => {
 		if (!skier.isJumping && skier.isMoving) {
+			sounds.play('snow');
 			skier.jump(400); // 400ms mini-hop instead of the standard 1000ms jump
 		}
 	};
@@ -371,8 +454,15 @@ function startNeverEndingGame() {
 
 	// Deep snow: ploughing through it slows the skier down
 	sprites.thickSnow.hitBehaviour.skier = (snow, skier) => {
+		if (!skier.isInDeepSnow()) sounds.play('snow'); // once, on the way in
 		skier.enterDeepSnow();
 	};
+
+	// Crash sounds, chosen by what the skier ran into
+	player.setHitObstacleCb(obstacle => {
+		if (TREE_SPRITES.has(obstacle?.data)) sounds.play('tree');
+		else if (obstacle?.data === sprites.dog) sounds.play('woof');
+	});
 
 	// Float every bonus above the skier so it's obvious when points land
 	player.setStylePointsCb((total, delta) => {
@@ -446,12 +536,21 @@ function startNeverEndingGame() {
 		},
 	});
 	game.addUIElement(wind);
+	game.addUIElement(ufoSpawner);
+
+	// ↑ ↑ ↓ ↓ ← → ← → B A on the keyboard or a gamepad: 30 skiers
+	const konami = new KonamiCode(() => {
+		if (game.isPaused()) return;
+		state.livesLeft = KONAMI_LIVES;
+		sounds.play('konami');
+		game.addMovingObject(new ScorePopup(`${KONAMI_LIVES} SKIERS!`, player, '#108020'));
+	});
 	windSound.preload();
 
 	setupInput({
 		player, game, canvas: mainCanvas, camera,
 		spawnMonster, spawnBoarder, spawnDog, spawnNoviceSkier,
-		playerLunge, toggleSkin, resetGame,
+		playerLunge, toggleSkin, resetGame, konami,
 	});
 
 	player.isMoving = false;
@@ -471,4 +570,4 @@ function resizeCanvas() {
 
 watchViewport(resizeCanvas);
 resizeCanvas();
-loadImages(imageSources).then(startNeverEndingGame);
+loadImages(imageSources).then(loadOptionalImages).then(startNeverEndingGame);

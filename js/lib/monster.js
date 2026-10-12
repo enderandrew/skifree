@@ -26,6 +26,7 @@ class Monster extends Sprite {
 
 		this.isEating = false;
 		this.isFull = false;
+		this.unkillable = !!data?.unkillable; // Bigfoot shrugs off the pole
 		this.isRoaring = false;
 		this.isPattingBelly = false;
 		// Fight-back states: 'stabbed' → 'hurt' → 'knockedOut'
@@ -148,7 +149,7 @@ class Monster extends Sprite {
 	// The fight-back sequence: the combined skier-stabs-yeti frame, the yeti
 	// howling, then the yeti flat on its back. onDone fires once it is gone.
 	getStabbed(skier, onDone = () => {}) {
-		if (this.isKnockedOut() || this.isEating) return false;
+		if (this.unkillable || this.isKnockedOut() || this.isEating) return false;
 
 		this.isRoaring = false;
 		this.isPattingBelly = false;

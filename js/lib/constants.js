@@ -59,3 +59,10 @@ export const WIND_RAMP_FRACTION = 0.25; // share of the gust spent building / dy
 export const WIND_MAX_PUSH = 1.6;       // sideways map px per cycle at full strength
 export const WIND_AIRBORNE_FACTOR = 1.5; // jumping skiers catch more wind
 export const WIND_STANDING_FACTOR = 0.3; // edges dug in while stopped
+
+// Easter eggs
+export const BIGFOOT_SCALE = 1.5;            // drawn 50% larger than the yeti
+export const KONAMI_LIVES = 30;
+export const UFO_CHANCE_PER_SECOND = 1 / 200;
+export const UFO_SPEED = 4;                  // map px per cycle across the screen
+export const UFO_BOB_PX = 4;                 // gentle up-and-down hover

@@ -1,3 +1,5 @@
+import { BIGFOOT_SCALE } from './lib/constants.js';
+
 // The yeti used to be deleted when it touched a tree. That never actually
 // happened in-game because moving objects were not culled, so the yeti always
 // trampled straight through. Moving objects are culled now, so this is kept as
@@ -187,6 +189,28 @@ const sprites = {
 		},
 		hitBehaviour: {
 			tree: monsterHitsTree
+		}
+	},
+
+	// ─── Bigfoot ──────────────────────────────────────────────────────────────
+	// Filled in at the bottom of this file: the yeti's frames, drawn from a
+	// brown-tinted copy of the sheet (made in main.js) at 1.5x size.
+	bigfoot: null,
+
+	// ─── UFO ──────────────────────────────────────────────────────────────────
+	// ufo.png is optional. main.js sets the frame size once it loads; until
+	// then (or if the file is missing) no UFOs appear.
+	ufo: {
+		$imageFile: 'ufo.png',
+		parts: {
+			main: [0, 0, 0, 0]
+		},
+		zIndexesOccupied: [1],   // flying: only a jumping skier can hit it
+		hitBoxes: {
+			1: [0, 0, 0, 0]
+		},
+		hitBehaviour: {
+			skier: obstacleHitsSkier
 		}
 	},
 
@@ -602,6 +626,13 @@ const sprites = {
 			skier: treeHitsSkier
 		}
 	}
+};
+
+sprites.bigfoot = {
+	...sprites.monster,
+	$imageFile: 'sprite-characters-bigfoot.png', // generated in main.js, not a real file
+	scale: BIGFOOT_SCALE,
+	unkillable: true,
 };
 
 export default sprites;

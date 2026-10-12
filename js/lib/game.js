@@ -165,6 +165,7 @@ class Game {
 			if (obj.cycle) obj.cycle(dt);
 		});
 
+		this._uiElements.cull(); // e.g. a UFO that has flown off-screen
 		this._uiElements.forEach(obj => {
 			if (obj.cycle) obj.cycle(dt);
 		});
