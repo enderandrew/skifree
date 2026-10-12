@@ -13,6 +13,9 @@ class Game {
 		this._staticObjects = new SpriteArray();
 		this._movingObjects = new SpriteArray();
 		this._uiElements = new SpriteArray();
+		this._groundEffects = new SpriteArray(); // drawn on the snow, under every sprite (ski tracks)
+		this._airEffects = new SpriteArray();    // drawn over the world sprites (powder spray)
+		this._overlays = new SpriteArray();      // full-screen, after the world, before the HUD (lighting)
 		this._mouseX = camera.getCentreOfViewport();
 		this._mouseY = 0;
 		this._paused = false;
@@ -55,6 +58,31 @@ class Game {
 
 	addUIElement(element) {
 		this._uiElements.push(element);
+	}
+
+	addGroundEffect(effect) {
+		this._groundEffects.push(effect);
+	}
+
+	addAirEffect(effect) {
+		this._airEffects.push(effect);
+	}
+
+	addOverlay(overlay) {
+		this._overlays.push(overlay);
+	}
+
+	// Read-only views for effects that need to find things (e.g. night lighting)
+	staticObjects() {
+		return this._staticObjects;
+	}
+
+	movingObjects() {
+		return this._movingObjects;
+	}
+
+	player() {
+		return this._player;
 	}
 
 	// ─── Callbacks ────────────────────────────────────────────────────────────
@@ -116,6 +144,10 @@ class Game {
 		this._paused = false;
 		this._staticObjects = new SpriteArray();
 		this._movingObjects = new SpriteArray();
+		// Effects and overlays survive a reset; they clear themselves via reset()
+		for (const layer of [this._groundEffects, this._airEffects, this._overlays]) {
+			layer.forEach(obj => obj.reset?.());
+		}
 		this._mouseX = this._camera.getCentreOfViewport();
 		this._mouseY = 0;
 		this._player.reset();
@@ -165,6 +197,11 @@ class Game {
 			if (obj.cycle) obj.cycle(dt);
 		});
 
+		for (const layer of [this._groundEffects, this._airEffects, this._overlays]) {
+			layer.cull();
+			layer.forEach(obj => obj.cycle?.(dt));
+		}
+
 		this._uiElements.cull(); // e.g. a UFO that has flown off-screen
 		this._uiElements.forEach(obj => {
 			if (obj.cycle) obj.cycle(dt);
@@ -176,15 +213,32 @@ class Game {
 	}
 
 	draw() {
-		this._camera.clearRect(0, 0, this._camera.logicalWidth(), this._camera.logicalHeight());
+		const camera = this._camera;
+		camera.clearRect(0, 0, camera.logicalWidth(), camera.logicalHeight());
 
-		this._player.draw(this._camera);
+		// The world shakes; the lighting overlay and HUD stay put
+		const [shakeX, shakeY] = camera.getShakeOffset?.() ?? [0, 0];
+		const shaking = shakeX !== 0 || shakeY !== 0;
+		if (shaking) {
+			camera.save();
+			camera.translate(shakeX, shakeY);
+		}
 
-		this._movingObjects.forEach(obj => obj.draw(this._camera));
+		this._groundEffects.forEach(obj => obj.draw(camera));
+
+		this._player.draw(camera);
+
+		this._movingObjects.forEach(obj => obj.draw(camera));
 
 		this._staticObjects.forEach(obj => {
-			if (obj.draw) obj.draw(this._camera, 'main');
+			if (obj.draw) obj.draw(camera, 'main');
 		});
+
+		this._airEffects.forEach(obj => obj.draw(camera));
+
+		if (shaking) camera.restore();
+
+		this._overlays.forEach(obj => obj.draw(camera));
 
 		this._uiElements.forEach(obj => {
 			if (obj.draw) obj.draw(this._camera, 'main');

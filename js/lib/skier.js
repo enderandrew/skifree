@@ -72,6 +72,8 @@ class Skier extends Sprite {
 		this.isHidden = false; // true while drawn as part of another sprite (yeti fight)
 		this.onHitObstacleCb = () => {};
 		this.onJumpCb = () => {};
+		this.onLandCb = () => {};
+		this._jumpSource = null; // 'ramp' | 'button' | 'hop'
 		this.onStylePointsCb = () => {};
 
 		this.setSpeed(this._standardSpeed);
@@ -120,7 +122,8 @@ class Skier extends Sprite {
 		this.setMapPosition(undefined, undefined, 0);
 	}
 
-	_setJumping(duration = SKIER_JUMP_DURATION_MS) {
+	_setJumping(duration = SKIER_JUMP_DURATION_MS, source = 'button') {
+		this._jumpSource = source;
 		const currentSpeed = this.getSpeed();
 		this.setSpeed(currentSpeed + SKIER_JUMP_SPEED_BONUS);
 		this.setSpeedY(currentSpeed + SKIER_JUMP_SPEED_BONUS);
@@ -156,12 +159,14 @@ class Skier extends Sprite {
 			this._pendingTrickPoints = 0;
 		}
 
+		const source = this._jumpSource;
 		this._setNormal();
+		this.onLandCb({ source });
 	}
 
 	jump(duration) {
 		if (this.isJumping || this.hasBeenHit || this.isBeingEaten) return;
-		this._setJumping(duration);
+		this._setJumping(duration, duration ? 'hop' : 'button');
 	}
 
 	// ─── Mid-Air Tricks ───────────────────────────────────────────────────────
@@ -553,6 +558,7 @@ class Skier extends Sprite {
 		// Already down from an earlier crash: running into something else
 		// while sprawled in the snow is the same crash, not a new one.
 		const alreadyDown = this.hasBeenHit;
+		const impactSpeed = this.isMoving ? this.getSpeed() : 0;
 		this._setOuching();
 		this.deductStylePoints(100);
 
@@ -562,7 +568,7 @@ class Skier extends Sprite {
 
 		if (obs?.id) this._obstaclesHit.push(obs.id);
 		this.resetSpeed();
-		this.onHitObstacleCb(obs, { alreadyDown });
+		this.onHitObstacleCb(obs, { alreadyDown, impactSpeed });
 
 		if (this._cancelableStateTimeout) clearTimeout(this._cancelableStateTimeout);
 		this._cancelableStateTimeout = setTimeout(() => {
@@ -576,7 +582,7 @@ class Skier extends Sprite {
 
 	hasHitJump(jumpObj) {
 		if (!this.isMoving) return;
-		this._setJumping();
+		this._setJumping(undefined, 'ramp');
 	}
 
 	isEatenBy(monster, whenEaten) {
@@ -612,6 +618,10 @@ class Skier extends Sprite {
 
 	setHitObstacleCb(fn) {
 		this.onHitObstacleCb = fn || (() => {});
+	}
+
+	setLandCb(fn) {
+		this.onLandCb = fn || (() => {});
 	}
 
 	setJumpCb(fn) {

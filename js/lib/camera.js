@@ -4,6 +4,50 @@ class Camera {
 		this._images = {};
 		this._centralSprite = null;
 		this._zoom = 1; // CSS pixels per game pixel (see viewport.js)
+		this._shake = null;
+		this._shakeEnabled = true;
+		this._random = Math.random;
+	}
+
+	_now() {
+		return typeof performance !== 'undefined' ? performance.now() : Date.now();
+	}
+
+	// ─── Screen shake ────────────────────────────────────────────────────────
+	// Shake is a draw-time offset only (see Game.draw); it never moves
+	// anything on the map, so collisions are unaffected.
+
+	setShakeEnabled(enabled) {
+		this._shakeEnabled = enabled;
+		if (!enabled) this._shake = null;
+	}
+
+	// amplitude in game pixels; a stronger shake replaces a weaker one
+	shake(amplitude, ms = 250) {
+		if (!this._shakeEnabled || amplitude <= 0) return;
+		const now = this._now();
+		if (this._shake && this._currentAmplitude(now) >= amplitude) return;
+		this._shake = { amplitude, start: now, ms };
+	}
+
+	_currentAmplitude(now) {
+		if (!this._shake) return 0;
+		const t = (now - this._shake.start) / this._shake.ms;
+		if (t >= 1) return 0;
+		return this._shake.amplitude * (1 - t) * (1 - t); // eases out
+	}
+
+	// Whole-pixel offset for this frame, so the pixel art stays crisp
+	getShakeOffset(now = this._now()) {
+		const a = this._currentAmplitude(now);
+		if (a < 0.5) {
+			this._shake = a > 0 ? this._shake : null;
+			return [0, 0];
+		}
+		return [
+			Math.round((this._random() * 2 - 1) * a),
+			Math.round((this._random() * 2 - 1) * a),
+		];
 	}
 
 	setZoom(zoom) {

@@ -7,6 +7,11 @@ class InfoBox {
 		this.left = data.position.left;
 		this.width = data.width;
 		this.height = data.height;
+		this.colour = data.colour || '#000000';
+	}
+
+	setColour(colour) {
+		this.colour = colour;
 	}
 
 	setLines(lines) {
@@ -27,6 +32,7 @@ class InfoBox {
 			dContext.font = `${fontSize}px monospace`;
 		}
 		const textHeight = fontSize * 1.5;
+		dContext.fillStyle = this.colour;
 
 		let yOffset = 0;
 		for (const line of this.lines) {

@@ -117,7 +117,10 @@ class Monster extends Sprite {
 	}
 
 	draw(dContext) {
-		return super.draw(dContext, this._getFrame());
+		// Remembered so overlays (night-time eye glow) can redraw the same
+		// frame without advancing the animation
+		this.lastFrame = this._getFrame();
+		return super.draw(dContext, this.lastFrame);
 	}
 
 	startEating(whenDone, skin = this._eatingSkin) {

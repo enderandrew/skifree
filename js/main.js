@@ -13,6 +13,8 @@ import SoundBank from './lib/sounds.js';
 import KonamiCode from './lib/konami.js';
 import Ufo from './lib/ufo.js';
 import { makeTintedSheet } from './lib/recolor.js';
+import { SkiTracks, PowderSpray } from './lib/juice.js';
+import { DayNight, findEyePixels } from './lib/dayNight.js';
 import Skier from './lib/skier.js';
 import InfoBox from './lib/infoBox.js';
 import Game from './lib/game.js';
@@ -29,7 +31,21 @@ import {
 	MONSTER_KNOCKOUT_POINTS,
 	KONAMI_LIVES,
 	UFO_CHANCE_PER_SECOND,
+	SKIER_STANDARD_SPEED,
 } from './lib/constants.js';
+
+// Screen-shake strengths, in game pixels
+const SHAKE_TREE = 4;          // tree crash at normal speed
+const SHAKE_TREE_FAST = 8;     // tree crash while boosting or straight off a jump
+const SHAKE_RAMP_LANDING = 4;
+const SHAKE_YETI_STEP = 2;
+const SHAKE_BIGFOOT_STEP = 4;
+const SHAKE_YETI_TRIP = 5;
+const STOMP_STEP_MS = 330;     // time between footfalls
+const STOMP_DURATION_MS = 2600; // footfalls shake for this long after it comes into view
+
+// Red eye pixels in the yeti frames, found when the images load
+let monsterEyes = {};
 
 const mainCanvas = document.getElementById('skifree-canvas');
 const snow = new Snow();
@@ -102,6 +118,7 @@ function loadOptionalImages() {
 	// back, Bigfoot is drawn from the normal sheet (grey, but still bigger).
 	const sheet = camera.getLoadedImage('sprite-characters.png');
 	camera.storeLoadedImage(sprites.bigfoot.$imageFile, makeTintedSheet(sheet, makeCanvas) || sheet);
+	monsterEyes = findEyePixels(sheet, sprites.monster.parts, makeCanvas);
 
 	return loadImage('ufo.png').then(im => {
 		const w = im.naturalWidth || im.width;
@@ -388,6 +405,49 @@ function startNeverEndingGame() {
 	player.setMapPositionTarget(0, 0);
 
 	game = new Game(camera, player);
+
+	// ─── Juice ───────────────────────────────────────────────────────────────
+	const skiTracks = new SkiTracks(player);
+	const powder = new PowderSpray(player);
+	game.addGroundEffect(skiTracks);
+	game.addAirEffect(powder);
+
+	const dayNight = new DayNight({
+		getMetres: () => state.distanceTravelled,
+		player,
+		getStaticObjects: () => game.staticObjects(),
+		getMonsters: () => monsters,
+		tallTreeData: sprites.tallTree,
+		eyes: monsterEyes,
+	});
+	game.addOverlay(dayNight);
+
+	// Respect "reduce motion": no screen shake
+	const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+	camera.setShakeEnabled(!reduceMotion?.matches);
+	reduceMotion?.addEventListener?.('change', e => camera.setShakeEnabled(!e.matches));
+
+	// Yetis and Bigfoot shake the screen with each footfall for a moment
+	// after they stomp into view
+	function stompMonstersIntoView() {
+		const now = performance.now();
+		const width = camera.logicalWidth();
+		const height = camera.logicalHeight();
+		for (const m of monsters) {
+			if (m.deleted) continue;
+			const [cx, cy] = camera.mapPositionToCanvasPosition(m.mapPosition);
+			const onScreen = cx + (m.width || 0) > 0 && cx < width && cy + (m.height || 0) > 0 && cy < height;
+			if (onScreen && !m._stompUntil) {
+				m._stompUntil = now + STOMP_DURATION_MS;
+				m._nextStomp = now;
+			}
+			const stomping = m._stompUntil && now < m._stompUntil && now >= m._nextStomp;
+			if (stomping && !m.isStunned && !m.isKnockedOut() && !m.isEating) {
+				camera.shake(m.unkillable ? SHAKE_BIGFOOT_STEP : SHAKE_YETI_STEP, 140);
+				m._nextStomp = now + STOMP_STEP_MS;
+			}
+		}
+	}
 	skiLiftManager = new SkiLiftManager({ game, camera, player, columnSpacing: 1500, baseColumnX: -250 });
 	slalomCourse = new SlalomCourse({ game, player, camera });
 
@@ -467,23 +527,38 @@ function startNeverEndingGame() {
 
 	// Every crash costs a skier (being eaten is handled separately: it ends
 	// the game outright). Then the sound for whatever was hit.
-	player.setHitObstacleCb((obstacle, { alreadyDown } = {}) => {
+	player.setHitObstacleCb((obstacle, { alreadyDown, impactSpeed = 0 } = {}) => {
 		if (obstacle instanceof Monster) return;
 		if (!alreadyDown) {
 			state.livesLeft = Math.max(0, state.livesLeft - 1);
 		}
-		if (TREE_SPRITES.has(obstacle?.data)) sounds.play('tree');
+		if (TREE_SPRITES.has(obstacle?.data)) {
+			sounds.play('tree');
+			// The faster you hit it, the harder the screen shakes
+			if (impactSpeed > SKIER_STANDARD_SPEED) camera.shake(SHAKE_TREE_FAST, 380);
+			else if (impactSpeed >= SKIER_STANDARD_SPEED) camera.shake(SHAKE_TREE, 280);
+		}
 		else if (obstacle?.data === sprites.dog) sounds.play('woof');
 	});
 
 	// Every take-off kicks up snow: ramps, the jump button and mogul hops
 	player.setJumpCb(() => sounds.play('snow'));
 
+	// Landing off a rainbow ramp: a thump and a burst of powder both ways
+	player.setLandCb(({ source }) => {
+		if (source !== 'ramp') return;
+		camera.shake(SHAKE_RAMP_LANDING, 220);
+		const x = player.mapPosition[0] + player.width / 2;
+		const y = player.mapPosition[1] + player.height - 3;
+		powder.burst(x, y, 0, 18);
+	});
+
 	// Lead a yeti into a big tree, a burning tree or a lift tower and it's
 	// knocked flat for a few seconds. Small trees it still tramples through.
 	const yetiTrap = (obstacle, monster) => {
 		if (monster.trip?.(obstacle)) {
 			sounds.play('tree');
+			camera.shake(SHAKE_YETI_TRIP, 260);
 			player.addStylePoints(250); // the points callback shows the +250
 		}
 	};
@@ -543,6 +618,9 @@ function startNeverEndingGame() {
 		if (!game.isPaused()) {
 			tickNPCs();
 			updateHUD();
+			stompMonstersIntoView();
+			// Light HUD text once it gets dark
+			infoBox.setColour(dayNight.isDark() ? '#dfe7f5' : '#000000');
 		}
 	});
 
