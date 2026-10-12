@@ -11,24 +11,36 @@
 // then covers an exact number of physical pixels and the pixel art stays
 // crisp instead of shimmering as it scrolls.
 
-// The amount of mountain the original showed. We never zoom so far in that
-// less than this is visible.
-export const DESIGN_WIDTH = 960;
-export const DESIGN_HEIGHT = 720;
+// Roughly how much mountain the 1991 game showed. The zoom is the largest
+// crisp step that still shows at least this much.
+export const DESIGN_WIDTH = 640;
+export const DESIGN_HEIGHT = 480;
 
-export function computeZoom(cssWidth, cssHeight, dpr = 1) {
+// Never zoom in so far that less than this is visible, whatever the bias
+const MIN_VISIBLE_WIDTH = 320;
+const MIN_VISIBLE_HEIGHT = 240;
+
+// bias: extra zoom steps chosen by the player (+ closer, - further out).
+// One step is one more device pixel per game pixel.
+export function computeZoom(cssWidth, cssHeight, dpr = 1, bias = 0) {
 	const fit = Math.min(cssWidth / DESIGN_WIDTH, cssHeight / DESIGN_HEIGHT);
-	if (!(fit > 1)) return 1; // small or normal screens: 1 game px = 1 CSS px
-	const physicalPerGamePixel = Math.max(1, Math.floor(fit * dpr));
-	return Math.max(1, physicalPerGamePixel / dpr);
+	// Small screens (phones, small windows) stay at 1 game px = 1 CSS px
+	let steps = fit > 1 ? Math.max(1, Math.floor(fit * dpr)) : Math.max(1, Math.round(dpr));
+	steps += Math.round(bias);
+
+	const maxSteps = Math.max(1, Math.floor(Math.min(cssWidth / MIN_VISIBLE_WIDTH, cssHeight / MIN_VISIBLE_HEIGHT) * dpr));
+	steps = Math.min(Math.max(1, steps), maxSteps);
+	const zoom = steps / dpr;
+	// Don't zoom out past 1:1 unless the player asked to
+	return bias < 0 ? zoom : Math.max(zoom, Math.min(1, maxSteps / dpr));
 }
 
 // Sizes the canvas for the current window and returns the values used.
-export function fitCanvasToWindow(canvas, camera, win = window) {
+export function fitCanvasToWindow(canvas, camera, win = window, bias = 0) {
 	const dpr = win.devicePixelRatio || 1;
 	const cssWidth = win.innerWidth;
 	const cssHeight = win.innerHeight;
-	const zoom = computeZoom(cssWidth, cssHeight, dpr);
+	const zoom = computeZoom(cssWidth, cssHeight, dpr, bias);
 
 	canvas.style.width = `${cssWidth}px`;
 	canvas.style.height = `${cssHeight}px`;

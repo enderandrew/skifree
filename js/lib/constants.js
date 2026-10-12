@@ -31,6 +31,14 @@ export const MONSTER_KNOCKOUT_POINTS = 1000;
 // Dog
 export const DOG_STANDARD_SPEED = 2;
 export const DOG_BARK_MS = 900;
+export const DOG_FLEE_SPEED = 10;     // twice a yeti's pace: it is never caught
+export const DOG_FLEE_MS = 3000;
+
+// Yeti picking other prey (see hunting.js)
+export const HUNT_SWITCH_RATIO = 0.6;      // goes for prey this much closer than the player
+export const HUNT_GIVE_UP_RATIO = 1.5;     // drops it if prey ends up this much further away
+export const HUNT_MAX_PREY_DISTANCE = 700; // ignores prey far from the player
+export const DOG_CHASE_MS = 1200;          // gives up on a dog almost straight away
 
 // Novice skier
 export const NOVICE_SKIER_STANDARD_SPEED = 2;

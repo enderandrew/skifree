@@ -15,6 +15,7 @@ import Ufo from './lib/ufo.js';
 import { makeTintedSheet } from './lib/recolor.js';
 import { SkiTracks, PowderSpray } from './lib/juice.js';
 import { DayNight, findEyePixels } from './lib/dayNight.js';
+import { updateHunt } from './lib/hunting.js';
 import Skier from './lib/skier.js';
 import InfoBox from './lib/infoBox.js';
 import Game from './lib/game.js';
@@ -132,6 +133,7 @@ function loadOptionalImages() {
 }
 
 function monsterHitsSkierBehaviour(monster, skier) {
+	if (monster.isEating) return; // busy with another meal
 	sounds.play('yummy');
 	skier.isEatenBy(monster, () => {
 		// Being eaten ends the game however many skiers are left
@@ -155,6 +157,7 @@ function startNeverEndingGame() {
 	let skiLiftManager;
 	let slalomCourse;
 	let monsters = [];
+	let npcs = [];   // novices, snowboarders and dogs: things a yeti might go for instead
 	let wind;
 
 	function resetGame() {
@@ -164,6 +167,7 @@ function startNeverEndingGame() {
 		state.highScore = Number(localStorage.getItem('highScore')) || 0;
 		game.reset();
 		monsters = [];
+		npcs = [];
 		wind.reset();
 		if (currentUfo) currentUfo.deleteOnNextCycle();
 		game.addStaticObject(startSign);
@@ -269,6 +273,7 @@ function startNeverEndingGame() {
 			boarder.crash();
 		});
 		game.addMovingObject(newBoarder);
+		npcs.push(newBoarder);
 	}
 
 	// Dogs appear just below the screen, trotting across the slope
@@ -282,6 +287,7 @@ function startNeverEndingGame() {
 			d.bark();
 		});
 		game.addMovingObject(dog);
+		npcs.push(dog);
 	}
 
 	// Beginners appear below the screen, so the player catches up with them
@@ -294,6 +300,31 @@ function startNeverEndingGame() {
 			n.knockOver();
 		});
 		game.addMovingObject(novice);
+		npcs.push(novice);
+	}
+
+	// Each yeti decides every frame whether something closer than the player
+	// is worth chasing (see hunting.js)
+	function huntOtherPrey() {
+		npcs = npcs.filter(n => !n.deleted);
+		if (!npcs.length) return;
+		const now = performance.now();
+		for (const monster of monsters) {
+			updateHunt(monster, {
+				player,
+				prey: npcs,
+				now,
+				isDog: npc => npc instanceof Dog,
+				eat: (m, npc) => {
+					sounds.play('yummy');
+					m.eatPrey(npc, () => m.follow(player)); // dessert over: back after the player
+				},
+				scare: dog => {
+					sounds.play('woof');
+					dog.fleeFrom(monster);
+				},
+			});
+		}
 	}
 
 	// X: jab with the ski pole. While the pole is extended, a yeti within reach
@@ -389,7 +420,7 @@ function startNeverEndingGame() {
 			infoBox.setLines([
 				'SkiFree.js',
 				'Space / Ins / Left-Click / E = Jump | Air: Down=Flip, Up=Daffy, Left/Right=Twist',
-				'X = Pole jab (fight the yeti!) | C = Change skier',
+				'X = Pole jab (fight the yeti!) | C = Change skier | -/= Zoom',
 				'Slalom (Left) | Freestyle (Center) | Tree Slalom (Right)',
 				`Travelled ${state.distanceTravelled.toFixed(1)}m`,
 				`Style Points: ${player.stylePoints}`,
@@ -619,6 +650,7 @@ function startNeverEndingGame() {
 			tickNPCs();
 			updateHUD();
 			stompMonstersIntoView();
+			huntOtherPrey();
 			// Light HUD text once it gets dark
 			infoBox.setColour(dayNight.isDark() ? '#dfe7f5' : '#000000');
 		}
@@ -655,7 +687,7 @@ function startNeverEndingGame() {
 	setupInput({
 		player, game, canvas: mainCanvas, camera,
 		spawnMonster, spawnBoarder, spawnDog, spawnNoviceSkier,
-		playerLunge, toggleSkin, resetGame, konami,
+		playerLunge, toggleSkin, resetGame, konami, adjustZoom,
 	});
 
 	player.isMoving = false;
@@ -667,8 +699,30 @@ function startNeverEndingGame() {
 // Re-fit on resize, rotation or a move to a screen with a different pixel
 // density. Snowflakes are rebuilt once the resizing settles.
 let snowRebuild = null;
+
+// The player's own zoom adjustment (- and = keys), remembered between visits
+let zoomBias = 0;
+try {
+	zoomBias = Number(localStorage.getItem('zoomBias')) || 0;
+} catch {
+	// storage unavailable: start from the automatic zoom
+}
+
+function adjustZoom(step) {
+	const before = camera.getZoom();
+	zoomBias += step;
+	fitCanvasToWindow(mainCanvas, camera, window, zoomBias);
+	// Hit the limit: undo the step so the bias doesn't drift past it
+	if (camera.getZoom() === before) zoomBias -= step;
+	try {
+		localStorage.setItem('zoomBias', String(zoomBias));
+	} catch {
+		// not saved; still applies for this visit
+	}
+}
+
 function resizeCanvas() {
-	fitCanvasToWindow(mainCanvas, camera);
+	fitCanvasToWindow(mainCanvas, camera, window, zoomBias);
 	clearTimeout(snowRebuild);
 	snowRebuild = setTimeout(() => snow.populate(), 250);
 }

@@ -45,6 +45,7 @@ class Snowboarder extends Sprite {
 	}
 
 	cycle(dt = 1) {
+		if (this.isHidden) return; // inside a yeti's eating frames
 		if (this.isCrashed) {
 			this.checkHittableObjects();
 			return;
@@ -63,6 +64,7 @@ class Snowboarder extends Sprite {
 	}
 
 	draw(dContext) {
+		if (this.isHidden) return;
 		if (this.isCrashed) return super.draw(dContext, 'hit');
 		return super.draw(dContext, this._trick || this._getDirection());
 	}

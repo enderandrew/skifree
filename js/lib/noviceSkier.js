@@ -38,6 +38,7 @@ class NoviceSkier extends Sprite {
 	}
 
 	cycle(dt = 1) {
+		if (this.isHidden) return; // inside a yeti's eating frames
 		if (!this.isDazed && this._now() - this._lastTurn > WOBBLE_MS) {
 			this._traverse = this._traverse === 'sEast' ? 'sWest' : 'sEast';
 			this._lastTurn = this._now();
@@ -47,6 +48,7 @@ class NoviceSkier extends Sprite {
 	}
 
 	draw(dContext) {
+		if (this.isHidden) return;
 		return super.draw(dContext, this.isDazed ? 'dazed' : this._traverse);
 	}
 }

@@ -14,8 +14,9 @@ describe('computeZoom', () => {
 	});
 
 	it('enlarges the game on big screens', () => {
-		expect(computeZoom(3840, 2160, 1)).toBe(3);      // 4K at 100%
-		expect(computeZoom(2560, 1440, 1)).toBe(2);      // 1440p
+		expect(computeZoom(3840, 2160, 1)).toBe(4);      // 4K at 100%
+		expect(computeZoom(2560, 1440, 1)).toBe(3);      // 1440p full screen
+		expect(computeZoom(2000, 1020, 1)).toBe(2);      // 1440p browser window
 	});
 
 	it('keeps every sprite pixel on a whole number of physical pixels', () => {
@@ -23,7 +24,8 @@ describe('computeZoom', () => {
 			const zoom = computeZoom(w, h, dpr);
 			if (zoom > 1) expect(Number.isInteger(Math.round(zoom * dpr * 1e6) / 1e6)).toBe(true);
 		}
-		expect(computeZoom(1920, 1080, 2)).toBe(1.5);    // 4K panel at 200% → 3 physical px per sprite px
+		expect(computeZoom(1920, 1080, 2)).toBe(2);      // 4K panel at 200% → 4 physical px per sprite px
+		expect(computeZoom(1536, 864, 1.25)).toBe(1.6);  // 1080p laptop at 125% → 2 physical px
 	});
 
 	it('never shows less mountain than the design size', () => {
@@ -32,6 +34,16 @@ describe('computeZoom', () => {
 			expect(w / zoom).toBeGreaterThanOrEqual(DESIGN_WIDTH);
 			expect(h / zoom).toBeGreaterThanOrEqual(DESIGN_HEIGHT);
 		}
+	});
+});
+
+describe('player zoom adjustment', () => {
+	it('steps closer and further out, within limits', () => {
+		expect(computeZoom(2000, 1020, 1, 1)).toBe(3);
+		expect(computeZoom(2000, 1020, 1, -1)).toBe(1);
+		expect(computeZoom(2000, 1020, 1, 50)).toBe(4);   // still shows at least 320x240
+		expect(computeZoom(2000, 1020, 1, -50)).toBe(1);  // never below one device pixel
+		expect(computeZoom(1920, 1080, 2, -1)).toBe(1.5); // half steps on a 2x display
 	});
 });
 
@@ -51,14 +63,14 @@ describe('fitCanvasToWindow', () => {
 		expect(canvas.width).toBe(3840);
 		expect(canvas.height).toBe(2160);
 		expect(canvas.style.width).toBe('1920px');
-		expect(camera.logicalWidth()).toBe(1280);   // zoom 1.5
-		expect(camera.logicalHeight()).toBe(720);
-		expect(calls).toEqual([[3, 3]]);
+		expect(camera.logicalWidth()).toBe(960);    // zoom 2
+		expect(camera.logicalHeight()).toBe(540);
+		expect(calls).toEqual([[4, 4]]);
 	});
 
 	it('maps pointer CSS coordinates into game coordinates', () => {
 		const { camera } = setup(1920, 1080, 2);
-		expect(camera.cssToLogical(960, 540)).toEqual([640, 360]);
+		expect(camera.cssToLogical(960, 540)).toEqual([480, 270]);
 	});
 
 	it('leaves an ordinary laptop screen at 1:1', () => {

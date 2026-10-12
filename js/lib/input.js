@@ -3,6 +3,7 @@ export default function setupInput({
 	spawnMonster, spawnBoarder, spawnDog = () => {}, spawnNoviceSkier = () => {},
 	playerLunge = () => {}, toggleSkin = () => {}, resetGame,
 	konami = null,
+	adjustZoom = () => {},
 }) {
 	const KONAMI_KEYS = {
 		ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
@@ -198,6 +199,16 @@ export default function setupInput({
 				break;
 			case 'KeyC':
 				toggleSkin();
+				break;
+
+			// View zoom: closer / further out
+			case 'Equal':
+			case 'NumpadAdd':
+				adjustZoom(+1);
+				break;
+			case 'Minus':
+			case 'NumpadSubtract':
+				adjustZoom(-1);
 				break;
 		}
 	});

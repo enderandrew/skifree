@@ -146,6 +146,18 @@ class Monster extends Sprite {
 		}
 	}
 
+	// Catch and eat a novice skier or snowboarder. The NPC disappears into
+	// the usual eating frames; onDone runs once it's been eaten.
+	eatPrey(npc, onDone = () => {}) {
+		npc.isHidden = true;
+		npc.isMoving = false;
+		this.setMapPosition(npc.mapPosition[0], npc.mapPosition[1]);
+		this.startEating(() => {
+			npc.deleteOnNextCycle();
+			onDone();
+		}, 'default');
+	}
+
 	// Satisfied belly pat after a meal, then it wanders off.
 	patBelly() {
 		this.isPattingBelly = true;
