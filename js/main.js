@@ -68,6 +68,7 @@ const dropRates = {
 
 const state = {
 	livesLeft: 5,
+	endReason: null,
 	highScore: Number(localStorage.getItem('highScore')) || 0,
 	distanceTravelled: 0,
 };
@@ -116,7 +117,9 @@ function loadOptionalImages() {
 function monsterHitsSkierBehaviour(monster, skier) {
 	sounds.play('yummy');
 	skier.isEatenBy(monster, () => {
-		state.livesLeft -= 1;
+		// Being eaten ends the game however many skiers are left
+		state.livesLeft = 0;
+		state.endReason = monster.unkillable ? 'Bigfoot ate you!' : 'The yeti ate you!';
 		monster.isFull = true;
 		monster.isEating = false;
 		skier.isBeingEaten = false;
@@ -140,6 +143,7 @@ function startNeverEndingGame() {
 	function resetGame() {
 		state.distanceTravelled = 0;
 		state.livesLeft = 5;
+		state.endReason = null;
 		state.highScore = Number(localStorage.getItem('highScore')) || 0;
 		game.reset();
 		monsters = [];
@@ -177,6 +181,7 @@ function startNeverEndingGame() {
 			}
 			infoBox.setLines([
 				'Game over!',
+				state.endReason || 'Out of skiers!',
 				'Hit space to restart',
 			]);
 			game.pause();
@@ -397,6 +402,9 @@ function startNeverEndingGame() {
 			let frame = 1;
 			let animTick = 0;
 			burningTree.cycle = (dt = 1) => {
+				// Keep running collision checks: replacing cycle() without this
+				// meant nothing could ever hit a burning tree
+				burningTree.checkHittableObjects();
 				animTick += dt;
 				if (animTick >= 6) { // Cycles fire frames every ~120ms
 					frame = (frame % 3) + 1;
@@ -421,7 +429,6 @@ function startNeverEndingGame() {
 	// Moguls: Give the skier a mini-jump / hop when skied over
 	const mogulHop = (mogul, skier) => {
 		if (!skier.isJumping && skier.isMoving) {
-			sounds.play('snow');
 			skier.jump(400); // 400ms mini-hop instead of the standard 1000ms jump
 		}
 	};
@@ -458,11 +465,31 @@ function startNeverEndingGame() {
 		skier.enterDeepSnow();
 	};
 
-	// Crash sounds, chosen by what the skier ran into
-	player.setHitObstacleCb(obstacle => {
+	// Every crash costs a skier (being eaten is handled separately: it ends
+	// the game outright). Then the sound for whatever was hit.
+	player.setHitObstacleCb((obstacle, { alreadyDown } = {}) => {
+		if (obstacle instanceof Monster) return;
+		if (!alreadyDown) {
+			state.livesLeft = Math.max(0, state.livesLeft - 1);
+		}
 		if (TREE_SPRITES.has(obstacle?.data)) sounds.play('tree');
 		else if (obstacle?.data === sprites.dog) sounds.play('woof');
 	});
+
+	// Every take-off kicks up snow: ramps, the jump button and mogul hops
+	player.setJumpCb(() => sounds.play('snow'));
+
+	// Lead a yeti into a big tree, a burning tree or a lift tower and it's
+	// knocked flat for a few seconds. Small trees it still tramples through.
+	const yetiTrap = (obstacle, monster) => {
+		if (monster.trip?.(obstacle)) {
+			sounds.play('tree');
+			player.addStylePoints(250); // the points callback shows the +250
+		}
+	};
+	for (const key of ['tallTree', 'burningTree', 'liftTower']) {
+		sprites[key].hitBehaviour.monster = yetiTrap;
+	}
 
 	// Float every bonus above the skier so it's obvious when points land
 	player.setStylePointsCb((total, delta) => {
@@ -520,7 +547,7 @@ function startNeverEndingGame() {
 	});
 
 	game.afterCycle(() => {
-		if (state.livesLeft === 0) detectEnd();
+		if (state.livesLeft <= 0) detectEnd();
 	});
 
 	game.addUIElement(infoBox);

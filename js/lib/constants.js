@@ -23,6 +23,7 @@ export const MONSTER_PAT_BELLY_MS = 1200;
 export const MONSTER_STABBED_MS = 500;
 export const MONSTER_HURT_MS = 600;
 export const MONSTER_KNOCKOUT_MS = 4000;
+export const MONSTER_STUN_MS = 3500;      // flat out after running into a big tree or tower
 export const MONSTER_STRIKE_REACH_X = 56; // pole reach, map px
 export const MONSTER_STRIKE_REACH_Y = 64;
 export const MONSTER_KNOCKOUT_POINTS = 1000;

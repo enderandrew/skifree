@@ -71,6 +71,7 @@ class Skier extends Sprite {
 		this.isJumping = false;
 		this.isHidden = false; // true while drawn as part of another sprite (yeti fight)
 		this.onHitObstacleCb = () => {};
+		this.onJumpCb = () => {};
 		this.onStylePointsCb = () => {};
 
 		this.setSpeed(this._standardSpeed);
@@ -132,6 +133,7 @@ class Skier extends Sprite {
 		this._isWalkingUp = false;
 		this.jumpCount += 1;
 		this.setMapPosition(undefined, undefined, 1);
+		this.onJumpCb(this);
 
 		if (this._cancelableStateTimeout) clearTimeout(this._cancelableStateTimeout);
 		this._cancelableStateTimeout = setTimeout(() => this._land(), duration);
@@ -548,6 +550,9 @@ class Skier extends Sprite {
 	}
 
 	hasHitObstacle(obs) {
+		// Already down from an earlier crash: running into something else
+		// while sprawled in the snow is the same crash, not a new one.
+		const alreadyDown = this.hasBeenHit;
 		this._setOuching();
 		this.deductStylePoints(100);
 
@@ -557,7 +562,7 @@ class Skier extends Sprite {
 
 		if (obs?.id) this._obstaclesHit.push(obs.id);
 		this.resetSpeed();
-		this.onHitObstacleCb(obs);
+		this.onHitObstacleCb(obs, { alreadyDown });
 
 		if (this._cancelableStateTimeout) clearTimeout(this._cancelableStateTimeout);
 		this._cancelableStateTimeout = setTimeout(() => {
@@ -607,6 +612,10 @@ class Skier extends Sprite {
 
 	setHitObstacleCb(fn) {
 		this.onHitObstacleCb = fn || (() => {});
+	}
+
+	setJumpCb(fn) {
+		this.onJumpCb = fn || (() => {});
 	}
 
 	setStylePointsCb(fn) {

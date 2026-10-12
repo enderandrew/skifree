@@ -8,6 +8,7 @@ import {
 	MONSTER_STABBED_MS,
 	MONSTER_HURT_MS,
 	MONSTER_KNOCKOUT_MS,
+	MONSTER_STUN_MS,
 } from './constants.js';
 
 // How often the roar / run animations swap frames
@@ -27,6 +28,9 @@ class Monster extends Sprite {
 		this.isEating = false;
 		this.isFull = false;
 		this.unkillable = !!data?.unkillable; // Bigfoot shrugs off the pole
+		// Stunned after running into a big tree or a lift tower
+		this.isStunned = false;
+		this._trippedOn = new Set(); // obstacles already run into, so waking up on one doesn't re-stun
 		this.isRoaring = false;
 		this.isPattingBelly = false;
 		// Fight-back states: 'stabbed' → 'hurt' → 'knockedOut'
@@ -53,7 +57,7 @@ class Monster extends Sprite {
 	// Stops and roars with raised arms the first time it comes into view,
 	// giving the player a moment's warning before the chase starts.
 	roar() {
-		if (this._hasRoared || this.isEating || this.isKnockedOut()) return;
+		if (this._hasRoared || this.isEating || this.isKnockedOut() || this.isStunned) return;
 		this._hasRoared = true;
 		this.isRoaring = true;
 		this.isMoving = false;
@@ -69,7 +73,7 @@ class Monster extends Sprite {
 			const screen = this._camera.mapPositionToCanvasPosition(this.mapPosition);
 			if (screen[1] > 0) this.roar();
 		}
-		if (this.isKnockedOut()) return; // harmless while being beaten
+		if (this.isKnockedOut() || this.isStunned) return; // harmless while flat out
 		if (this.isRoaring || this.isPattingBelly) {
 			// Stand still, but anyone skiing into it still gets caught
 			this.checkHittableObjects();
@@ -82,6 +86,7 @@ class Monster extends Sprite {
 		if (this.fightState === 'stabbed') return this._stabbedFrom === 'west' ? 'stabbedWest' : 'stabbed';
 		if (this.fightState === 'hurt') return 'fightRoar';
 		if (this.fightState === 'knockedOut') return 'knockout';
+		if (this.isStunned) return 'knockout';
 
 		if (this.isEating) {
 			// Frames 1-2 show the skier's head, so they come in two skins
@@ -148,8 +153,28 @@ class Monster extends Sprite {
 
 	// The fight-back sequence: the combined skier-stabs-yeti frame, the yeti
 	// howling, then the yeti flat on its back. onDone fires once it is gone.
+	// Ran into a big tree, a burning tree or a lift tower: flat on its back
+	// with X-eyes for a few seconds, then it gets up and resumes the chase.
+	// Returns true if it actually went down.
+	trip(obstacle, ms = MONSTER_STUN_MS) {
+		if (this.isEating || this.isStunned || this.isKnockedOut()) return false;
+		if (obstacle?.id !== undefined) {
+			if (this._trippedOn.has(obstacle.id)) return false;
+			this._trippedOn.add(obstacle.id);
+		}
+		this.isStunned = true;
+		this.isRoaring = false;
+		this.isPattingBelly = false;
+		this._setTimer(() => {
+			this.isStunned = false;
+			this.isMoving = true;
+		}, ms);
+		return true;
+	}
+
 	getStabbed(skier, onDone = () => {}) {
 		if (this.unkillable || this.isKnockedOut() || this.isEating) return false;
+		this.isStunned = false; // a stunned yeti is a sitting target
 
 		this.isRoaring = false;
 		this.isPattingBelly = false;

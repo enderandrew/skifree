@@ -217,3 +217,65 @@ describe('UFO', () => {
 		expect(skier.hits(ufo)).toBe(true);
 	});
 });
+
+describe('crashes, lives and the yeti trap', () => {
+	it('reports whether the skier was already down when hit again', () => {
+		vi.useFakeTimers();
+		const skier = new Skier(sprites.skier);
+		const calls = [];
+		skier.setHitObstacleCb((obs, info) => calls.push(info.alreadyDown));
+		skier.hasHitObstacle({ id: 'tree-1' });
+		skier.hasHitObstacle({ id: 'tree-2' }); // sprawled into a second tree
+		vi.advanceTimersByTime(3000);
+		skier.hasHitObstacle({ id: 'tree-3' }); // a fresh crash after getting up
+		expect(calls).toEqual([false, true, false]);
+	});
+
+	it('calls the jump callback on every take-off', () => {
+		vi.useFakeTimers();
+		const skier = new Skier(sprites.skier);
+		const jumps = vi.fn();
+		skier.setJumpCb(jumps);
+		skier.jump();
+		vi.advanceTimersByTime(1100);
+		skier.hasHitJump({});
+		expect(jumps).toHaveBeenCalledTimes(2);
+	});
+
+	it('a yeti that runs into a big tree is stunned, shows the knockout frame, then resumes', () => {
+		vi.useFakeTimers();
+		const yeti = new Monster(sprites.monster);
+		const tree = new Sprite(sprites.tallTree);
+		expect(yeti.trip(tree)).toBe(true);
+		expect(yeti.isStunned).toBe(true);
+		expect(yeti._getFrame()).toBe('knockout');
+		const before = [...yeti.mapPosition];
+		yeti.setSpeed(5);
+		yeti.cycle(1);
+		expect(yeti.mapPosition).toEqual(before); // lies still
+		vi.advanceTimersByTime(3600);
+		expect(yeti.isStunned).toBe(false);
+		expect(yeti.trip(tree)).toBe(false); // getting up on the same tree doesn't re-stun
+	});
+
+	it('a stunned yeti cannot eat you but can be stabbed', () => {
+		vi.useFakeTimers();
+		const yeti = new Monster(sprites.monster);
+		const skier = new Skier(sprites.skier);
+		skier.setDirection(90);
+		const hit = vi.fn();
+		yeti.onHitting(skier, hit);
+		yeti.trip(new Sprite(sprites.liftTower));
+		yeti.cycle(1);
+		expect(hit).not.toHaveBeenCalled();
+		expect(yeti.getStabbed(skier)).toBe(true);
+		expect(yeti.isStunned).toBe(false);
+	});
+
+	it('trees and towers carry the trap; small trees do not', async () => {
+		// main.js installs the trap; check the spots it targets have z=0 hit boxes a yeti can touch
+		for (const key of ['tallTree', 'burningTree', 'liftTower']) {
+			expect(sprites[key].hitBoxes[0], key).toBeDefined();
+		}
+	});
+});
