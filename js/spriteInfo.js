@@ -22,58 +22,122 @@ const obstacleHitsSkier = (obstacle, skier) => {
 	skier.hasHitObstacle(obstacle);
 };
 
+// Coordinate convention (all [x, y, w, h]):
+//  - sprite-characters.png: y/h span the full band between the green separator
+//    lines, x/w are pixel-tight. Sprite.draw() places frames by their top-left
+//    corner, so a shared height per row keeps feet on the same baseline and
+//    stops frames from bobbing up and down when the animation switches.
+//    Bands: 0-33, 37-70, 74-108, 112-154, 158-200, 204-222, 226-257,
+//           267-300, 304-344, 348-374, 378-404, 408-448.
+//  - skifree-objects.png: pixel-tight boxes, never touching the blue lines
+//    at rows 63-65 and 130-132.
+// Hit boxes are [left, top, right, bottom] in sprite-local pixels.
+
 const sprites = {
 
-	// ─── Player Skier Tricks & Poses (sprite-characters.png) ────────────────
+	// ─── Player Skier (sprite-characters.png) ───────────────────────────────
 	skier: {
 		$imageFile: 'sprite-characters.png',
 		parts: {
 			blank: [0, 0, 0, 0],
-			east: [0, 0, 24, 34],
-			esEast: [24, 0, 24, 34],
-			sEast: [49, 0, 17, 34],
-			south: [65, 0, 17, 34],
-			sWest: [49, 37, 17, 34],
-			wsWest: [24, 37, 24, 34],
-			west: [0, 37, 24, 34],
 
-			// Crashes
-			ouch: [242, 0, 31, 34],
-			ouchCloud: [232, 0, 48, 34],
-			hit: [0, 78, 31, 29],
-
-			// Freestyle Tricks & Poses
+			// Row 1 (band y 0-33)
+			east: [0, 0, 23, 34],
+			esEast: [25, 0, 22, 34],
+			sEast: [49, 0, 16, 34],
+			south: [67, 0, 15, 34],
 			jumping: [84, 0, 32, 34],
-			somersault1: [116, 0, 32, 34],
-			somersault2: [148, 0, 32, 34],
-			trickTipCross: [181, 0, 25, 34],
-			trickTwinTips: [208, 0, 23, 34],
-			daffy: [77, 75, 27, 30],         // Corrected: cleanly captures crossed skis without pole sliver
-			push: [106, 75, 24, 30],
-			skateEast: [31, 75, 20, 30],
-			skateWest: [53, 75, 21, 30],
+			somersault1: [118, 0, 29, 34],
+			somersault2: [149, 0, 31, 34],
+			trickTipCross: [182, 0, 28, 34],   // was 25 wide: right 4px cut off
+			trickTwinTips: [212, 0, 28, 34],   // was x208: grabbed 2px of the previous frame; includes its snow-spray dots
+			ouch: [242, 0, 31, 34],            // includes the "OUCH!" text and its own cloud
 
-			// Uphill Walking Cycle (East)
-			walkEast1: [0, 340, 20, 34],
-			walkEast2: [21, 340, 20, 34],
-			walkEast3: [42, 340, 21, 34],
-			walkEast4: [64, 340, 24, 34],
-			walkEast5: [89, 340, 25, 34],
-			walkEast6: [115, 340, 23, 34],
-			walkEast7: [139, 340, 23, 34],
-			walkEast8: [163, 340, 24, 34],
-			walkEast9: [188, 340, 25, 34],
+			// Row 2 (band y 37-70) — mirrored versions
+			west: [1, 37, 23, 34],
+			wsWest: [26, 37, 22, 34],
+			sWest: [50, 37, 16, 34],
+			trickTipCrossWest: [182, 37, 28, 34], // NEW: mirror of trickTipCross
 
-			// Uphill Walking Cycle (West)
-			walkWest1: [0, 377, 20, 34],
-			walkWest2: [21, 377, 20, 34],
-			walkWest3: [42, 377, 21, 34],
-			walkWest4: [64, 377, 24, 34],
-			walkWest5: [89, 377, 25, 34],
-			walkWest6: [115, 377, 23, 34],
-			walkWest7: [139, 377, 23, 34],
-			walkWest8: [163, 377, 24, 34],
-			walkWest9: [188, 377, 25, 34]
+			// Row 3 (band y 74-108). The old boxes here were 3-8px off and cut
+			// the bottom 3px (skis) off every frame.
+			hit: [0, 74, 31, 35],
+			skateEast: [33, 74, 23, 35],       // note: both "skate" frames face the same way —
+			skateWest: [58, 74, 23, 35],       //   these are a 2-frame skating cycle, not east/west
+			daffy: [83, 74, 32, 35],           // upside-down, crossed skis
+			push: [117, 74, 25, 35],           // leaping with poles back
+
+			// Rows 10-11 (bands y 348-374 / 378-404): 11 frames, all facing east.
+			// Frames 1-8 are the walk, 9-11 are a pole-thrust lunge.
+			// There is NO west-facing walk art on the sheet; row 378 is the
+			// alternate (olive-hair) skin, not a mirror. walkWest* reuses the east
+			// boxes until you either flip the canvas or draw west frames.
+			// skier.js cycles `% 9`; change that to `% 8` for this walk.
+			walkEast1: [0, 348, 13, 27],
+			walkEast2: [15, 348, 15, 27],
+			walkEast3: [33, 348, 14, 27],
+			walkEast4: [49, 348, 20, 27],
+			walkEast5: [71, 348, 18, 27],
+			walkEast6: [91, 348, 19, 27],
+			walkEast7: [112, 348, 16, 27],
+			walkEast8: [130, 348, 15, 27],
+			lunge1: [147, 348, 22, 27],
+			lunge2: [171, 348, 21, 27],
+			lunge3: [194, 348, 33, 27],
+
+			walkWest1: [0, 348, 13, 27],
+			walkWest2: [15, 348, 15, 27],
+			walkWest3: [33, 348, 14, 27],
+			walkWest4: [49, 348, 20, 27],
+			walkWest5: [71, 348, 18, 27],
+			walkWest6: [91, 348, 19, 27],
+			walkWest7: [112, 348, 16, 27],
+			walkWest8: [130, 348, 15, 27]
+		},
+		hitBoxes: {
+			0: [7, 20, 27, 34]
+		},
+		id: 'player',
+		hitBehaviour: {}
+	},
+
+	// ─── Alternate Skier Skin (olive hair) ──────────────────────────────────
+	// Rows 8-9 and 11 are pixel-for-pixel copies of the default skier except
+	// for the hair colour (#7C8500). Same layout, same part names.
+	skierAlt: {
+		$imageFile: 'sprite-characters.png',
+		parts: {
+			blank: [0, 0, 0, 0],
+			east: [0, 267, 23, 34],
+			esEast: [25, 267, 22, 34],
+			sEast: [49, 267, 16, 34],
+			south: [67, 267, 15, 34],
+			jumping: [84, 267, 32, 34],
+			somersault1: [118, 267, 29, 34],
+			somersault2: [149, 267, 31, 34],
+			trickTipCross: [182, 267, 28, 34],
+			trickTwinTips: [212, 267, 28, 34],
+			ouch: [242, 267, 31, 34],
+
+			// Row 3 equivalent (band y 304-344 is taller because of the yeti frames)
+			hit: [0, 304, 31, 41],
+			skateEast: [33, 304, 23, 41],
+			skateWest: [58, 304, 23, 41],
+			daffy: [83, 304, 32, 41],
+			push: [117, 304, 25, 41],
+
+			walkEast1: [0, 378, 13, 27],
+			walkEast2: [15, 378, 15, 27],
+			walkEast3: [33, 378, 14, 27],
+			walkEast4: [49, 378, 20, 27],
+			walkEast5: [71, 378, 18, 27],
+			walkEast6: [91, 378, 19, 27],
+			walkEast7: [112, 378, 16, 27],
+			walkEast8: [130, 378, 15, 27],
+			lunge1: [147, 378, 22, 27],
+			lunge2: [171, 378, 21, 27],
+			lunge3: [194, 378, 33, 27]
+			// No mirrored (west) row exists for this skin.
 		},
 		hitBoxes: {
 			0: [7, 20, 27, 34]
@@ -86,100 +150,115 @@ const sprites = {
 	monster: {
 		$imageFile: 'sprite-characters.png',
 		parts: {
-			roar1: [0, 112, 30, 43],
-			roar2: [31, 112, 32, 43],
-			sEast1: [64, 112, 26, 43],
-			sEast2: [90, 112, 32, 43],
-			sWest1: [64, 158, 26, 43],
-			sWest2: [90, 158, 32, 43],
-			patBelly: [0, 158, 28, 43],
-			eating1: [122, 112, 34, 43],
-			eating2: [156, 112, 31, 43],
-			eating3: [187, 112, 31, 43],
-			eating4: [219, 112, 25, 43],
-			eating5: [243, 112, 26, 43],
-			toothPick1: [270, 112, 25, 43],
-			toothPick2: [296, 112, 26, 43],
-			knockout: [77, 448, 43, 26]
+			// Row 4 (band y 112-154)
+			roar1: [0, 112, 32, 43],           // was 30 wide: right 2px cut
+			roar2: [34, 112, 28, 43],
+			sEast1: [64, 112, 25, 43],
+			sEast2: [91, 112, 30, 43],
+			eating1: [123, 112, 32, 43],
+			eating2: [157, 112, 29, 43],
+			eating3: [188, 112, 29, 43],
+			eating4: [219, 112, 23, 43],
+			eating5: [244, 112, 26, 43],       // fork/toothpick pose
+
+			// Row 5 (band y 158-200)
+			patBelly: [0, 158, 26, 43],
+			sWest1: [65, 158, 25, 43],
+			sWest2: [91, 158, 30, 43],
+
+			// Eating frames for the alt skin (band y 304-344)
+			eatingAlt1: [144, 304, 32, 41],
+			eatingAlt2: [178, 304, 29, 41],
+
+			// Row 12 (band y 408-448) — the fight-back sequence
+			fightRoar: [0, 408, 28, 41],       // NEW
+			stabbed: [30, 408, 44, 41],        // NEW: skier + yeti in one frame
+			knockout: [76, 408, 41, 41]        // was y448: pointed at empty space below the art
+			// toothPick1/2 removed: x270/x296 are past the 273px sheet edge
 		},
 		hitBehaviour: {
 			tree: monsterHitsTree
 		}
 	},
 
-	// ─── Snowboarder ─────────────────────────────────────────────────────────
+	// ─── Snowboarder (band y 226-257) ────────────────────────────────────────
 	snowboarder: {
 		$imageFile: 'sprite-characters.png',
 		parts: {
-			sEast: [73, 229, 20, 29],
-			sWest: [95, 228, 26, 30],
-			grab: [122, 227, 24, 31],
-			somersault: [147, 227, 34, 31],
-			hit: [182, 228, 28, 30]
+			sEast: [73, 226, 20, 32],
+			sWest: [95, 226, 26, 32],
+			grab: [123, 226, 25, 32],
+			somersault: [150, 226, 32, 32],    // was y227: top row cut
+			hit: [184, 226, 30, 32]            // was 182/28: right 4px cut
 		},
 		hitBoxes: {
-			0: [2, 10, 22, 29]
+			0: [2, 13, 22, 32]
 		},
 		hitBehaviour: {
 			skier: obstacleHitsSkier
 		}
 	},
 
-	// ─── Novice Skier NPC ────────────────────────────────────────────────────
+	// ─── Novice Skier NPC (band y 226-257) ──────────────────────────────────
 	noviceSkier: {
 		$imageFile: 'sprite-characters.png',
 		parts: {
-			sEast: [0, 228, 22, 29],
-			sWest: [23, 228, 22, 29],
-			dazed: [46, 228, 25, 29]
+			sEast: [0, 226, 22, 32],           // old boxes cut the bottom row (ski tips)
+			sWest: [24, 226, 21, 32],
+			dazed: [47, 226, 24, 32]
 		},
 		hitBoxes: {
-			0: [2, 10, 20, 29]
+			0: [2, 13, 20, 32]
 		},
 		hitBehaviour: {
 			skier: obstacleHitsSkier
 		}
 	},
 
-	// ─── Dog NPC ─────────────────────────────────────────────────────────────
+	// ─── Dog NPC (band y 204-222) ────────────────────────────────────────────
+	// Both run frames face the same way (2-frame cycle), as do both bark
+	// frames. bark used to start at y199, which pulled in the green line.
 	dog: {
 		$imageFile: 'sprite-characters.png',
 		parts: {
-			runLeft: [0, 206, 23, 17],
-			runRight: [24, 206, 23, 17],
-			bark: [48, 199, 36, 24],
-			pee: [86, 204, 21, 19]
+			runLeft: [0, 204, 21, 19],         // really run1
+			runRight: [23, 204, 21, 19],       // really run2
+			bark1: [46, 204, 20, 19],          // "WOOF!" frame 1
+			bark2: [67, 204, 19, 19]           // "WOOF!" frame 2
+			// pee removed: nothing at x86-106 on the sheet
 		},
 		hitBoxes: {
-			0: [2, 2, 20, 17]
+			0: [2, 6, 20, 19]
 		},
 		hitBehaviour: {
 			skier: obstacleHitsSkier
 		}
 	},
 
-	// ─── Vendor Cart Obstacle ────────────────────────────────────────────────
-	vendorCart: {
+	// ─── Occupied Chair Lift (band y 226-257) ────────────────────────────────
+	// This is what was labelled vendorCart: red chair, hanger arm, two riders.
+	occupiedChairLift: {
 		$imageFile: 'sprite-characters.png',
 		parts: {
-			main: [211, 226, 27, 32]
+			main: [215, 226, 26, 32]
 		},
+		zIndexesOccupied: [1],
 		hitBoxes: {
-			0: [2, 14, 25, 32]
+			1: [0, 0, 26, 32]
 		},
 		hitBehaviour: {
 			skier: obstacleHitsSkier
 		}
 	},
 
-	// ─── Trees & Terrain Obstacles ───────────────────────────────────────────
+	// ─── Trees & Terrain Obstacles (skifree-objects.png) ────────────────────
 	smallTree: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [0, 28, 30, 34]
+			main: [0, 31, 28, 32]
 		},
 		hitBoxes: {
-			0: [0, 18, 30, 34]
+			0: [0, 16, 28, 32]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier,
@@ -189,7 +268,7 @@ const sprites = {
 	tallTree: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [95, 66, 32, 64]
+			main: [96, 66, 32, 64]             // was x95: right column cut
 		},
 		zIndexesOccupied: [0, 1],
 		hitBoxes: {
@@ -204,10 +283,10 @@ const sprites = {
 	deadTree: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [0, 99, 21, 29]          // Corrected: clears blue line
+			main: [0, 103, 22, 27]
 		},
 		hitBoxes: {
-			0: [2, 12, 19, 29]
+			0: [2, 10, 20, 27]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier,
@@ -217,26 +296,40 @@ const sprites = {
 	burningTree: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			frame1: [23, 95, 23, 33],
-			frame2: [47, 95, 23, 33],
-			frame3: [71, 95, 21, 33]
+			frame1: [24, 103, 22, 27],
+			frame2: [48, 103, 22, 27],
+			frame3: [72, 103, 22, 27]          // was 71/21: right 2px cut
 		},
 		hitBoxes: {
-			0: [2, 12, 21, 33]
+			0: [2, 10, 20, 27]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier
 		}
 	},
+	// Not actually tall: these are two small decorated-tree variants at the
+	// top-right of the sheet. The old box (y1-64) ran into the blue line.
+	// Key kept so main.js keeps working; consider renaming to decoratedTree.
 	decoratedTallTree: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [284, 1, 32, 64] 
+			main: [281, 31, 28, 32]
 		},
-		zIndexesOccupied: [0, 1],
 		hitBoxes: {
-			0: [0, 52, 32, 64],            // Base footing collision on snow
-			1: [0, 10, 32, 52]             // Tree branches collision when jumping
+			0: [0, 16, 28, 32]
+		},
+		hitBehaviour: {
+			skier: treeHitsSkier,
+			monster: treeHitsMonster
+		}
+	},
+	decoratedTree2: {
+		$imageFile: 'skifree-objects.png',
+		parts: {
+			main: [311, 31, 26, 32]
+		},
+		hitBoxes: {
+			0: [0, 16, 26, 32]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier,
@@ -258,26 +351,46 @@ const sprites = {
 	stump: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [254, 53, 16, 12]
+			main: [253, 52, 16, 11]            // was y53/h12: bottom row was the blue line
 		},
 		hitBoxes: {
-			0: [0, 2, 16, 12]
+			0: [0, 2, 16, 11]
 		},
 		hitBehaviour: {
 			skier: rockHitsSkier
 		}
 	},
+	// The grey arcs between the jump and the stump: the upper cluster reads
+	// as a deep-snow patch, the ground-level arcs as individual moguls.
+	// thickSnow and mogul previously shared one box that sliced through two bumps.
 	thickSnow: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [143, 53, 43, 10]
+			main: [187, 31, 64, 25]
 		},
 		hitBehaviour: {}
 	},
 	mogul: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [143, 53, 43, 10]
+			main: [161, 55, 24, 8]
+		},
+		hitBehaviour: {}
+	},
+	mogulSmall: {
+		$imageFile: 'skifree-objects.png',
+		parts: {
+			main: [143, 59, 16, 4]
+		},
+		hitBehaviour: {}
+	},
+	mogulVariants: {
+		// Remaining ground-level bumps, if you want variety
+		$imageFile: 'skifree-objects.png',
+		parts: {
+			a: [187, 56, 18, 5],
+			b: [208, 58, 18, 5],
+			c: [237, 57, 14, 5]
 		},
 		hitBehaviour: {}
 	},
@@ -293,10 +406,10 @@ const sprites = {
 	mushroom: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [272, 53, 10, 12]
+			main: [271, 52, 8, 11]             // was y53/h12: bottom row was the blue line
 		},
 		hitBoxes: {
-			0: [0, 0, 10, 12]
+			0: [0, 0, 8, 11]
 		},
 		hitBehaviour: {}
 	},
@@ -305,12 +418,12 @@ const sprites = {
 	liftTower: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [58, 0, 24, 66]
+			main: [55, 0, 24, 63]              // was x58/h66: left 3px cut, blue line at bottom
 		},
 		zIndexesOccupied: [0, 1],
 		hitBoxes: {
-			0: [4, 44, 20, 66],
-			1: [0, 0, 24, 66]
+			0: [4, 44, 20, 63],
+			1: [0, 0, 24, 63]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier,
@@ -320,11 +433,11 @@ const sprites = {
 	emptyChairLift: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [87, 34, 27, 32]
+			main: [81, 33, 26, 30]             // was x87: left 6px (hanger) cut, blue line at bottom
 		},
 		zIndexesOccupied: [1],
 		hitBoxes: {
-			1: [0, 0, 27, 32]
+			1: [0, 0, 26, 30]
 		},
 		hitBehaviour: {
 			skier: obstacleHitsSkier
@@ -337,15 +450,15 @@ const sprites = {
 		parts: {
 			main: [260, 103, 42, 27]
 		},
-		hitBehaviour: {}
+		hitBehaviour: {}                       // has a post but no hit box — intentional?
 	},
 	signFreestyle: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [130, 96, 42, 34]
+			main: [130, 95, 40, 35]
 		},
 		hitBoxes: {
-			0: [2, 18, 40, 34]
+			0: [2, 19, 38, 35]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier
@@ -354,10 +467,10 @@ const sprites = {
 	signSlalom: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [173, 96, 42, 34]
+			main: [172, 94, 40, 36]            // was x173: bled 1px of the Tree Slalom sign
 		},
 		hitBoxes: {
-			0: [2, 18, 40, 34]
+			0: [2, 20, 38, 36]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier
@@ -366,10 +479,10 @@ const sprites = {
 	signTreeSlalom: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [216, 96, 43, 34]
+			main: [214, 94, 44, 36]
 		},
 		hitBoxes: {
-			0: [2, 18, 41, 34]
+			0: [2, 20, 42, 36]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier
@@ -378,10 +491,10 @@ const sprites = {
 	signStartLeft: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [0, 137, 43, 27]
+			main: [0, 135, 42, 27]
 		},
 		hitBoxes: {
-			0: [5, 12, 38, 27]
+			0: [4, 12, 42, 27]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier
@@ -392,10 +505,10 @@ const sprites = {
 	gateRed: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [44, 137, 12, 27]
+			main: [44, 138, 12, 24]
 		},
 		hitBoxes: {
-			0: [0, 10, 12, 27]
+			0: [0, 8, 12, 24]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier
@@ -404,10 +517,10 @@ const sprites = {
 	gateBlue: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [57, 137, 12, 27]
+			main: [58, 138, 12, 24]            // was x57: right column cut
 		},
 		hitBoxes: {
-			0: [0, 10, 12, 27]
+			0: [0, 8, 12, 24]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier
@@ -416,10 +529,10 @@ const sprites = {
 	poleSmiley: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [70, 137, 14, 27]
+			main: [72, 138, 12, 24]
 		},
 		hitBoxes: {
-			0: [0, 10, 14, 27]
+			0: [0, 8, 12, 24]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier
@@ -428,10 +541,10 @@ const sprites = {
 	poleFrowny: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [85, 137, 14, 27]
+			main: [86, 138, 12, 24]
 		},
 		hitBoxes: {
-			0: [0, 10, 14, 27]
+			0: [0, 8, 12, 24]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier
@@ -440,10 +553,10 @@ const sprites = {
 	signFinishLeft: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [104, 131, 48, 33]
+			main: [100, 133, 51, 29]           // was 104,131: left 4px cut, blue line on top
 		},
 		hitBoxes: {
-			0: [4, 15, 44, 33]
+			0: [2, 12, 49, 29]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier
@@ -452,10 +565,10 @@ const sprites = {
 	signFinishRight: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [153, 131, 48, 33]
+			main: [152, 133, 50, 29]           // was 153,131: blue line on top
 		},
 		hitBoxes: {
-			0: [4, 15, 44, 33]
+			0: [2, 12, 48, 29]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier
