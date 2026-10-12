@@ -1,10 +1,9 @@
-const monsterHitsTree = monster => {
-	monster.deleteOnNextCycle();
-};
-
-const treeHitsMonster = (tree, monster) => {
-	monster.deleteOnNextCycle();
-};
+// The yeti used to be deleted when it touched a tree. That never actually
+// happened in-game because moving objects were not culled, so the yeti always
+// trampled straight through. Moving objects are culled now, so this is kept as
+// an explicit no-op to preserve the behaviour players are used to.
+const monsterHitsTree = () => {};
+const treeHitsMonster = () => {};
 
 const treeHitsSkier = (tree, skier) => {
 	skier.hasHitObstacle(tree);
@@ -22,78 +21,83 @@ const obstacleHitsSkier = (obstacle, skier) => {
 	skier.hasHitObstacle(obstacle);
 };
 
-// Coordinate convention (all [x, y, w, h]):
+// Coordinate convention: [x, y, w, h] or [x, y, w, h, true].
+//  - A trailing `true` means "draw this region mirrored horizontally". The
+//    sheet's west-facing row is a pixel-exact mirror of the east row, so this
+//    gives west-facing art for frames that only exist facing east (the walk
+//    cycle, the lunge, the dog, the alternate skin).
 //  - sprite-characters.png: y/h span the full band between the green separator
-//    lines, x/w are pixel-tight. Sprite.draw() places frames by their top-left
-//    corner, so a shared height per row keeps feet on the same baseline and
-//    stops frames from bobbing up and down when the animation switches.
+//    lines and x/w are pixel-tight. Sprite.draw() places frames by their
+//    top-left corner, so a shared height per row keeps feet on the same
+//    baseline and stops frames bobbing when an animation switches.
 //    Bands: 0-33, 37-70, 74-108, 112-154, 158-200, 204-222, 226-257,
 //           267-300, 304-344, 348-374, 378-404, 408-448.
 //  - skifree-objects.png: pixel-tight boxes, never touching the blue lines
 //    at rows 63-65 and 130-132.
 // Hit boxes are [left, top, right, bottom] in sprite-local pixels.
 
+const mirror = ([x, y, w, h]) => [x, y, w, h, true];
+
+const walkFrames = rowY => ({
+	walkEast1: [0, rowY, 13, 27],
+	walkEast2: [15, rowY, 15, 27],
+	walkEast3: [33, rowY, 14, 27],
+	walkEast4: [49, rowY, 20, 27],
+	walkEast5: [71, rowY, 18, 27],
+	walkEast6: [91, rowY, 19, 27],
+	walkEast7: [112, rowY, 16, 27],
+	walkEast8: [130, rowY, 15, 27],
+	lungeEast1: [147, rowY, 22, 27],
+	lungeEast2: [171, rowY, 21, 27],
+	lungeEast3: [194, rowY, 33, 27],
+});
+
+const withWestMirrors = frames => {
+	const out = { ...frames };
+	for (const [key, box] of Object.entries(frames)) {
+		if (key.includes('East')) out[key.replace('East', 'West')] = mirror(box);
+	}
+	return out;
+};
+
+const defaultSkierParts = {
+	blank: [0, 0, 0, 0],
+
+	// Row 1 (band y 0-33)
+	east: [0, 0, 23, 34],
+	esEast: [25, 0, 22, 34],
+	sEast: [49, 0, 16, 34],
+	south: [67, 0, 15, 34],
+	jumping: [84, 0, 32, 34],          // spread-eagle: the default airborne pose
+	somersault1: [118, 0, 29, 34],     // flip, inverted with skis up
+	somersault2: [149, 0, 31, 34],     // flip, upside down legs apart
+	trickTwistEast: [182, 0, 28, 34],  // body turned side-on, skis pointing east
+	trickSkisUp: [212, 0, 28, 34],     // seen from behind, skis vertical, snow spray
+	ouch: [242, 0, 31, 34],            // includes "OUCH!" and its cloud
+
+	// Row 2 (band y 37-70) — pixel-exact mirrors of row 1
+	west: [1, 37, 23, 34],
+	wsWest: [26, 37, 22, 34],
+	sWest: [50, 37, 16, 34],
+	trickTwistWest: [182, 37, 28, 34],
+
+	// Row 3 (band y 74-108)
+	hit: [0, 74, 31, 35],              // sitting in the snow after a crash
+	skate1: [33, 74, 23, 35],          // 2-frame skating push (both face east)
+	skate2: [58, 74, 23, 35],
+	tumble: [83, 74, 32, 35],          // upside down with crossed skis: bad landing
+	daffy: [117, 74, 25, 35],          // one ski forward, one back
+
+	// Rows 10 (band y 348-374): walk + pole lunge, mirrored for west
+	...withWestMirrors(walkFrames(348)),
+};
+
 const sprites = {
 
 	// ─── Player Skier (sprite-characters.png) ───────────────────────────────
 	skier: {
 		$imageFile: 'sprite-characters.png',
-		parts: {
-			blank: [0, 0, 0, 0],
-
-			// Row 1 (band y 0-33)
-			east: [0, 0, 23, 34],
-			esEast: [25, 0, 22, 34],
-			sEast: [49, 0, 16, 34],
-			south: [67, 0, 15, 34],
-			jumping: [84, 0, 32, 34],
-			somersault1: [118, 0, 29, 34],
-			somersault2: [149, 0, 31, 34],
-			trickTipCross: [182, 0, 28, 34],   // was 25 wide: right 4px cut off
-			trickTwinTips: [212, 0, 28, 34],   // was x208: grabbed 2px of the previous frame; includes its snow-spray dots
-			ouch: [242, 0, 31, 34],            // includes the "OUCH!" text and its own cloud
-
-			// Row 2 (band y 37-70) — mirrored versions
-			west: [1, 37, 23, 34],
-			wsWest: [26, 37, 22, 34],
-			sWest: [50, 37, 16, 34],
-			trickTipCrossWest: [182, 37, 28, 34], // NEW: mirror of trickTipCross
-
-			// Row 3 (band y 74-108). The old boxes here were 3-8px off and cut
-			// the bottom 3px (skis) off every frame.
-			hit: [0, 74, 31, 35],
-			skateEast: [33, 74, 23, 35],       // note: both "skate" frames face the same way —
-			skateWest: [58, 74, 23, 35],       //   these are a 2-frame skating cycle, not east/west
-			daffy: [83, 74, 32, 35],           // upside-down, crossed skis
-			push: [117, 74, 25, 35],           // leaping with poles back
-
-			// Rows 10-11 (bands y 348-374 / 378-404): 11 frames, all facing east.
-			// Frames 1-8 are the walk, 9-11 are a pole-thrust lunge.
-			// There is NO west-facing walk art on the sheet; row 378 is the
-			// alternate (olive-hair) skin, not a mirror. walkWest* reuses the east
-			// boxes until you either flip the canvas or draw west frames.
-			// skier.js cycles `% 9`; change that to `% 8` for this walk.
-			walkEast1: [0, 348, 13, 27],
-			walkEast2: [15, 348, 15, 27],
-			walkEast3: [33, 348, 14, 27],
-			walkEast4: [49, 348, 20, 27],
-			walkEast5: [71, 348, 18, 27],
-			walkEast6: [91, 348, 19, 27],
-			walkEast7: [112, 348, 16, 27],
-			walkEast8: [130, 348, 15, 27],
-			lunge1: [147, 348, 22, 27],
-			lunge2: [171, 348, 21, 27],
-			lunge3: [194, 348, 33, 27],
-
-			walkWest1: [0, 348, 13, 27],
-			walkWest2: [15, 348, 15, 27],
-			walkWest3: [33, 348, 14, 27],
-			walkWest4: [49, 348, 20, 27],
-			walkWest5: [71, 348, 18, 27],
-			walkWest6: [91, 348, 19, 27],
-			walkWest7: [112, 348, 16, 27],
-			walkWest8: [130, 348, 15, 27]
-		},
+		parts: defaultSkierParts,
 		hitBoxes: {
 			0: [7, 20, 27, 34]
 		},
@@ -102,43 +106,42 @@ const sprites = {
 	},
 
 	// ─── Alternate Skier Skin (olive hair) ──────────────────────────────────
-	// Rows 8-9 and 11 are pixel-for-pixel copies of the default skier except
-	// for the hair colour (#7C8500). Same layout, same part names.
+	// Rows 8, 9 and 11 repeat the default skier with olive hair (#7C8500).
+	// There is no west row for this skin, so west frames are mirrors.
 	skierAlt: {
 		$imageFile: 'sprite-characters.png',
-		parts: {
-			blank: [0, 0, 0, 0],
-			east: [0, 267, 23, 34],
-			esEast: [25, 267, 22, 34],
-			sEast: [49, 267, 16, 34],
-			south: [67, 267, 15, 34],
-			jumping: [84, 267, 32, 34],
-			somersault1: [118, 267, 29, 34],
-			somersault2: [149, 267, 31, 34],
-			trickTipCross: [182, 267, 28, 34],
-			trickTwinTips: [212, 267, 28, 34],
-			ouch: [242, 267, 31, 34],
+		parts: (() => {
+			const east = {
+				east: [0, 267, 23, 34],
+				esEast: [25, 267, 22, 34],
+				sEast: [49, 267, 16, 34],
+				trickTwistEast: [182, 267, 28, 34],
+			};
+			return {
+				blank: [0, 0, 0, 0],
+				...east,
+				west: mirror(east.east),
+				wsWest: mirror(east.esEast),
+				sWest: mirror(east.sEast),
+				trickTwistWest: mirror(east.trickTwistEast),
+				south: [67, 267, 15, 34],
+				jumping: [84, 267, 32, 34],
+				somersault1: [118, 267, 29, 34],
+				somersault2: [149, 267, 31, 34],
+				trickSkisUp: [212, 267, 28, 34],
+				ouch: [242, 267, 31, 34],
 
-			// Row 3 equivalent (band y 304-344 is taller because of the yeti frames)
-			hit: [0, 304, 31, 41],
-			skateEast: [33, 304, 23, 41],
-			skateWest: [58, 304, 23, 41],
-			daffy: [83, 304, 32, 41],
-			push: [117, 304, 25, 41],
+				// Band y 304-344 is taller (it also holds two yeti frames), so these
+				// start at y310 to share row 3's 35px height and baseline.
+				hit: [0, 310, 31, 35],
+				skate1: [33, 310, 23, 35],
+				skate2: [58, 310, 23, 35],
+				tumble: [83, 310, 32, 35],
+				daffy: [117, 310, 25, 35],
 
-			walkEast1: [0, 378, 13, 27],
-			walkEast2: [15, 378, 15, 27],
-			walkEast3: [33, 378, 14, 27],
-			walkEast4: [49, 378, 20, 27],
-			walkEast5: [71, 378, 18, 27],
-			walkEast6: [91, 378, 19, 27],
-			walkEast7: [112, 378, 16, 27],
-			walkEast8: [130, 378, 15, 27],
-			lunge1: [147, 378, 22, 27],
-			lunge2: [171, 378, 21, 27],
-			lunge3: [194, 378, 33, 27]
-			// No mirrored (west) row exists for this skin.
-		},
+				...withWestMirrors(walkFrames(378)),
+			};
+		})(),
 		hitBoxes: {
 			0: [7, 20, 27, 34]
 		},
@@ -151,7 +154,7 @@ const sprites = {
 		$imageFile: 'sprite-characters.png',
 		parts: {
 			// Row 4 (band y 112-154)
-			roar1: [0, 112, 32, 43],           // was 30 wide: right 2px cut
+			roar1: [0, 112, 32, 43],
 			roar2: [34, 112, 28, 43],
 			sEast1: [64, 112, 25, 43],
 			sEast2: [91, 112, 30, 43],
@@ -166,15 +169,16 @@ const sprites = {
 			sWest1: [65, 158, 25, 43],
 			sWest2: [91, 158, 30, 43],
 
-			// Eating frames for the alt skin (band y 304-344)
+			// Eating frames 1-2 for the alt skin. Their band (y 304-344) and the
+			// fight band below are 41px, not 43, so these draw 2px shorter.
 			eatingAlt1: [144, 304, 32, 41],
 			eatingAlt2: [178, 304, 29, 41],
 
 			// Row 12 (band y 408-448) — the fight-back sequence
-			fightRoar: [0, 408, 28, 41],       // NEW
-			stabbed: [30, 408, 44, 41],        // NEW: skier + yeti in one frame
-			knockout: [76, 408, 41, 41]        // was y448: pointed at empty space below the art
-			// toothPick1/2 removed: x270/x296 are past the 273px sheet edge
+			fightRoar: [0, 408, 28, 41],
+			stabbed: [30, 408, 44, 41],        // skier + yeti in one frame
+			stabbedWest: mirror([30, 408, 44, 41]),
+			knockout: [76, 408, 41, 41]
 		},
 		hitBehaviour: {
 			tree: monsterHitsTree
@@ -188,8 +192,8 @@ const sprites = {
 			sEast: [73, 226, 20, 32],
 			sWest: [95, 226, 26, 32],
 			grab: [123, 226, 25, 32],
-			somersault: [150, 226, 32, 32],    // was y227: top row cut
-			hit: [184, 226, 30, 32]            // was 182/28: right 4px cut
+			somersault: [150, 226, 32, 32],
+			hit: [184, 226, 30, 32]
 		},
 		hitBoxes: {
 			0: [2, 13, 22, 32]
@@ -203,7 +207,7 @@ const sprites = {
 	noviceSkier: {
 		$imageFile: 'sprite-characters.png',
 		parts: {
-			sEast: [0, 226, 22, 32],           // old boxes cut the bottom row (ski tips)
+			sEast: [0, 226, 22, 32],
 			sWest: [24, 226, 21, 32],
 			dazed: [47, 226, 24, 32]
 		},
@@ -216,27 +220,58 @@ const sprites = {
 	},
 
 	// ─── Dog NPC (band y 204-222) ────────────────────────────────────────────
-	// Both run frames face the same way (2-frame cycle), as do both bark
-	// frames. bark used to start at y199, which pulled in the green line.
+	// All four frames face east; west is drawn mirrored.
 	dog: {
 		$imageFile: 'sprite-characters.png',
 		parts: {
-			runLeft: [0, 204, 21, 19],         // really run1
-			runRight: [23, 204, 21, 19],       // really run2
-			bark1: [46, 204, 20, 19],          // "WOOF!" frame 1
-			bark2: [67, 204, 19, 19]           // "WOOF!" frame 2
-			// pee removed: nothing at x86-106 on the sheet
+			runEast1: [0, 204, 21, 19],
+			runEast2: [23, 204, 21, 19],
+			barkEast1: [46, 204, 20, 19],     // "WOOF!" frame 1
+			barkEast2: [67, 204, 19, 19],     // "WOOF!" frame 2
+			runWest1: mirror([0, 204, 21, 19]),
+			runWest2: mirror([23, 204, 21, 19]),
+			barkWest1: mirror([46, 204, 20, 19]),
+			barkWest2: mirror([67, 204, 19, 19])
 		},
 		hitBoxes: {
-			0: [2, 6, 20, 19]
+			0: [2, 6, 19, 19]
 		},
 		hitBehaviour: {
 			skier: obstacleHitsSkier
 		}
 	},
 
-	// ─── Occupied Chair Lift (band y 226-257) ────────────────────────────────
-	// This is what was labelled vendorCart: red chair, hanger arm, two riders.
+	// ─── Ski Lift ────────────────────────────────────────────────────────────
+	liftTower: {
+		$imageFile: 'skifree-objects.png',
+		parts: {
+			main: [55, 0, 24, 63]
+		},
+		zIndexesOccupied: [0, 1],
+		hitBoxes: {
+			0: [4, 44, 20, 63],
+			1: [0, 0, 24, 63]
+		},
+		hitBehaviour: {
+			skier: treeHitsSkier,
+			monster: treeHitsMonster
+		}
+	},
+	// Rides the left cable, empty, going downhill
+	emptyChairLift: {
+		$imageFile: 'skifree-objects.png',
+		parts: {
+			main: [81, 33, 26, 30]
+		},
+		zIndexesOccupied: [1],
+		hitBoxes: {
+			1: [0, 0, 26, 30]
+		},
+		hitBehaviour: {
+			skier: obstacleHitsSkier
+		}
+	},
+	// Rides the right cable, carrying two skiers uphill
 	occupiedChairLift: {
 		$imageFile: 'sprite-characters.png',
 		parts: {
@@ -268,7 +303,7 @@ const sprites = {
 	tallTree: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [96, 66, 32, 64]             // was x95: right column cut
+			main: [96, 66, 32, 64]
 		},
 		zIndexesOccupied: [0, 1],
 		hitBoxes: {
@@ -280,13 +315,17 @@ const sprites = {
 			monster: treeHitsMonster
 		}
 	},
+	// Occupies z=1 too, so a jumping skier still touches it. main.js turns
+	// that airborne touch into setting the tree alight instead of a crash.
 	deadTree: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
 			main: [0, 103, 22, 27]
 		},
+		zIndexesOccupied: [0, 1],
 		hitBoxes: {
-			0: [2, 10, 20, 27]
+			0: [2, 10, 20, 27],
+			1: [0, 0, 22, 27]
 		},
 		hitBehaviour: {
 			skier: treeHitsSkier,
@@ -298,7 +337,7 @@ const sprites = {
 		parts: {
 			frame1: [24, 103, 22, 27],
 			frame2: [48, 103, 22, 27],
-			frame3: [72, 103, 22, 27]          // was 71/21: right 2px cut
+			frame3: [72, 103, 22, 27]
 		},
 		hitBoxes: {
 			0: [2, 10, 20, 27]
@@ -307,10 +346,7 @@ const sprites = {
 			skier: treeHitsSkier
 		}
 	},
-	// Not actually tall: these are two small decorated-tree variants at the
-	// top-right of the sheet. The old box (y1-64) ran into the blue line.
-	// Key kept so main.js keeps working; consider renaming to decoratedTree.
-	decoratedTallTree: {
+	decoratedTree: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
 			main: [281, 31, 28, 32]
@@ -351,7 +387,7 @@ const sprites = {
 	stump: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [253, 52, 16, 11]            // was y53/h12: bottom row was the blue line
+			main: [253, 52, 16, 11]
 		},
 		hitBoxes: {
 			0: [0, 2, 16, 11]
@@ -360,9 +396,7 @@ const sprites = {
 			skier: rockHitsSkier
 		}
 	},
-	// The grey arcs between the jump and the stump: the upper cluster reads
-	// as a deep-snow patch, the ground-level arcs as individual moguls.
-	// thickSnow and mogul previously shared one box that sliced through two bumps.
+	// Upper cluster of grey arcs: a deep-snow patch
 	thickSnow: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
@@ -370,6 +404,7 @@ const sprites = {
 		},
 		hitBehaviour: {}
 	},
+	// Ground-level grey arcs: individual mogul bumps
 	mogul: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
@@ -384,13 +419,24 @@ const sprites = {
 		},
 		hitBehaviour: {}
 	},
-	mogulVariants: {
-		// Remaining ground-level bumps, if you want variety
+	mogulA: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			a: [187, 56, 18, 5],
-			b: [208, 58, 18, 5],
-			c: [237, 57, 14, 5]
+			main: [187, 56, 18, 5]
+		},
+		hitBehaviour: {}
+	},
+	mogulB: {
+		$imageFile: 'skifree-objects.png',
+		parts: {
+			main: [208, 58, 18, 5]
+		},
+		hitBehaviour: {}
+	},
+	mogulC: {
+		$imageFile: 'skifree-objects.png',
+		parts: {
+			main: [237, 57, 14, 5]
 		},
 		hitBehaviour: {}
 	},
@@ -403,45 +449,18 @@ const sprites = {
 			skier: jumpHitsSkier
 		}
 	},
+	// Occupies z=1 so it can be grabbed mid-air (see main.js)
 	mushroom: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [271, 52, 8, 11]             // was y53/h12: bottom row was the blue line
-		},
-		hitBoxes: {
-			0: [0, 0, 8, 11]
-		},
-		hitBehaviour: {}
-	},
-
-	// ─── Ski Lift ────────────────────────────────────────────────────────────
-	liftTower: {
-		$imageFile: 'skifree-objects.png',
-		parts: {
-			main: [55, 0, 24, 63]              // was x58/h66: left 3px cut, blue line at bottom
+			main: [271, 52, 8, 11]
 		},
 		zIndexesOccupied: [0, 1],
 		hitBoxes: {
-			0: [4, 44, 20, 63],
-			1: [0, 0, 24, 63]
+			0: [0, 0, 8, 11],
+			1: [0, 0, 8, 11]
 		},
-		hitBehaviour: {
-			skier: treeHitsSkier,
-			monster: treeHitsMonster
-		}
-	},
-	emptyChairLift: {
-		$imageFile: 'skifree-objects.png',
-		parts: {
-			main: [81, 33, 26, 30]             // was x87: left 6px (hanger) cut, blue line at bottom
-		},
-		zIndexesOccupied: [1],
-		hitBoxes: {
-			1: [0, 0, 26, 30]
-		},
-		hitBehaviour: {
-			skier: obstacleHitsSkier
-		}
+		hitBehaviour: {}
 	},
 
 	// ─── Course Billboards & Signage ─────────────────────────────────────────
@@ -450,7 +469,7 @@ const sprites = {
 		parts: {
 			main: [260, 103, 42, 27]
 		},
-		hitBehaviour: {}                       // has a post but no hit box — intentional?
+		hitBehaviour: {}
 	},
 	signFreestyle: {
 		$imageFile: 'skifree-objects.png',
@@ -467,7 +486,7 @@ const sprites = {
 	signSlalom: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [172, 94, 40, 36]            // was x173: bled 1px of the Tree Slalom sign
+			main: [172, 94, 40, 36]
 		},
 		hitBoxes: {
 			0: [2, 20, 38, 36]
@@ -517,7 +536,7 @@ const sprites = {
 	gateBlue: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [58, 138, 12, 24]            // was x57: right column cut
+			main: [58, 138, 12, 24]
 		},
 		hitBoxes: {
 			0: [0, 8, 12, 24]
@@ -553,7 +572,7 @@ const sprites = {
 	signFinishLeft: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [100, 133, 51, 29]           // was 104,131: left 4px cut, blue line on top
+			main: [100, 133, 51, 29]
 		},
 		hitBoxes: {
 			0: [2, 12, 49, 29]
@@ -565,7 +584,7 @@ const sprites = {
 	signFinishRight: {
 		$imageFile: 'skifree-objects.png',
 		parts: {
-			main: [152, 133, 50, 29]           // was 153,131: blue line on top
+			main: [152, 133, 50, 29]
 		},
 		hitBoxes: {
 			0: [2, 12, 48, 29]

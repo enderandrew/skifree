@@ -13,6 +13,10 @@ import {
 	SKIER_JUMP_SPEED_BONUS,
 } from './constants.js';
 
+const WALK_FRAMES = 8;
+const LUNGE_FRAMES = 3;
+const LUNGE_FRAME_MS = 110;
+
 const DISCRETE_DIRECTIONS = {
 	west:   270,
 	wsWest: 240,
@@ -48,11 +52,16 @@ class Skier extends Sprite {
 		this._isWalkingUp = false;
 		this._walkStep = 0;
 		this._walkDirection = 'east';
+		this._crashPose = null;   // overrides 'ouch' while the crash plays (e.g. 'tumble')
+		this._lungeFrame = 0;     // 0 = not lunging, 1-3 = lunge animation frame
+		this._lungeTimeout = null;
+		this.skin = 'default';
 
 		this.isMoving = true;
 		this.hasBeenHit = false;
 		this.isOuching = false;
 		this.isJumping = false;
+		this.isHidden = false; // true while drawn as part of another sprite (yeti fight)
 		this.onHitObstacleCb = () => {};
 		this.onStylePointsCb = () => {};
 
@@ -73,6 +82,7 @@ class Skier extends Sprite {
 		this.isOuching = false;
 		this.isJumping = false;
 		this._trickPose = null;
+		this._crashPose = null;
 		this._somersaultStage = 0;
 		this._clearTimers();
 		this.setMapPosition(undefined, undefined, 0);
@@ -95,6 +105,7 @@ class Skier extends Sprite {
 		this.isOuching = false;
 		this.isJumping = false;
 		this._trickPose = null;
+		this._crashPose = null;
 		this._somersaultStage = 0;
 		this._clearTimers();
 		this.setMapPosition(undefined, undefined, 0);
@@ -123,6 +134,7 @@ class Skier extends Sprite {
 		// Crash if landed mid-somersault / upside down
 		if (this._somersaultStage !== 0) {
 			this.hasHitObstacle({ id: 'bad-landing' });
+			this._crashPose = 'tumble'; // upside down in crossed skis, not the tree "OUCH!"
 			this.deductStylePoints(300);
 			return;
 		}
@@ -157,21 +169,29 @@ class Skier extends Sprite {
 		}
 	}
 
+	// Up in the air. A second press while holding the daffy switches to the
+	// skis-up pose, so both up-trick frames on the sheet get used.
 	trickDaffy() {
-		if (!this.isJumping) return;
-		this._trickPose = 'daffy';
-		this._pendingTrickPoints += 200;
+		if (!this.isJumping || this._somersaultStage !== 0) return;
+		if (this._trickPose === 'daffy') {
+			this._trickPose = 'trickSkisUp';
+			this._pendingTrickPoints += 150;
+		} else {
+			this._trickPose = 'daffy';
+			this._pendingTrickPoints += 200;
+		}
 	}
 
+	// Left/right in the air twist the body side-on, facing the pressed way.
 	trickTwisterLeft() {
-		if (!this.isJumping) return;
-		this._trickPose = 'trickTipCross';
+		if (!this.isJumping || this._somersaultStage !== 0) return;
+		this._trickPose = 'trickTwistWest';
 		this._pendingTrickPoints += 100;
 	}
 
 	trickTwisterRight() {
-		if (!this.isJumping) return;
-		this._trickPose = 'trickTwinTips';
+		if (!this.isJumping || this._somersaultStage !== 0) return;
+		this._trickPose = 'trickTwistEast';
 		this._pendingTrickPoints += 100;
 	}
 
@@ -247,7 +267,7 @@ class Skier extends Sprite {
 			this.mapPosition[1] -= this.speed * 1.5;
 			this._isWalkingUp = true;
 			this._walkDirection = dir;
-			this._walkStep = (this._walkStep + 1) % 9;
+			this._walkStep = (this._walkStep + 1) % WALK_FRAMES;
 		}
 	}
 
@@ -391,10 +411,14 @@ class Skier extends Sprite {
 
 	draw(dContext) {
 		const spritePartToUse = () => {
-			if (this.isBeingEaten) return 'blank';
+			if (this.isBeingEaten || this.isHidden) return 'blank';
 			if (this.isJumping) return this._trickPose || 'jumping';
-			if (this.isOuching) return 'ouch';
+			if (this.isOuching) return this._crashPose || 'ouch';
 			if (this.hasBeenHit) return 'hit';
+
+			if (this._lungeFrame) {
+				return `lunge${this._facing() === 'west' ? 'West' : 'East'}${this._lungeFrame}`;
+			}
 
 			if (this._isWalkingUp) {
 				const prefix = this._walkDirection === 'west' ? 'walkWest' : 'walkEast';
@@ -411,6 +435,45 @@ class Skier extends Sprite {
 		if (this._obstaclesHit.includes(obs.id)) return false;
 		if (!obs.occupiesZIndex(this.mapPosition[2])) return false;
 		return super.hits(obs);
+	}
+
+	_facing() {
+		if (this._isWalkingUp) return this._walkDirection;
+		const dir = this._getDiscreteDirection();
+		return ['west', 'wsWest', 'sWest'].includes(dir) ? 'west' : 'east';
+	}
+
+	isLunging() {
+		return this._lungeFrame > 0;
+	}
+
+	// Thrust the ski pole forward (the walk/lunge rows of the sheet).
+	isStriking() {
+		return this._lungeFrame >= 2; // pole extended on frames 2-3
+	}
+
+	lunge() {
+		if (this.isJumping || this.hasBeenHit || this.isBeingEaten || this._lungeFrame) return false;
+		this._lungeFrame = 1;
+		const advance = () => {
+			if (this._lungeFrame >= LUNGE_FRAMES) {
+				this._lungeFrame = 0;
+				this._lungeTimeout = null;
+				return;
+			}
+			this._lungeFrame += 1;
+			this._lungeTimeout = setTimeout(advance, LUNGE_FRAME_MS);
+		};
+		this._lungeTimeout = setTimeout(advance, LUNGE_FRAME_MS);
+		return true;
+	}
+
+	// Swap between the default skier and the olive-haired alternate rows.
+	setSkin(skin, data) {
+		this.skin = skin;
+		this.data = data;
+		const heights = Object.values(data.parts).map(p => p[3]);
+		this.maxHeight = Math.max(...heights);
 	}
 
 	speedBoost() {
@@ -457,7 +520,7 @@ class Skier extends Sprite {
 
 	isEatenBy(monster, whenEaten) {
 		this.hasHitObstacle(monster);
-		monster.startEating(whenEaten);
+		monster.startEating(whenEaten, this.skin);
 		this._obstaclesHit.push(monster.id);
 		this.isMoving = false;
 		this.isBeingEaten = true;
@@ -465,6 +528,10 @@ class Skier extends Sprite {
 
 	reset() {
 		this._clearTimers();
+		if (this._lungeTimeout) clearTimeout(this._lungeTimeout);
+		this._lungeFrame = 0;
+		this._crashPose = null;
+		this.isHidden = false;
 		if (this._boostTimeout) clearTimeout(this._boostTimeout);
 		if (this._boostCooldownTimeout) clearTimeout(this._boostCooldownTimeout);
 

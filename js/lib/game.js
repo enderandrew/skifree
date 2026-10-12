@@ -139,6 +139,9 @@ class Game {
 
 		this._player.cycle(dt);
 
+		// Moving objects flagged with deleteOnNextCycle() (despawned lift chairs,
+		// NPCs that left the screen) were never removed and kept cycling forever.
+		this._movingObjects.cull();
 		this._movingObjects.forEach(obj => obj.cycle(dt));
 
 		// Prune static objects that have scrolled 500px above the top of the viewport
@@ -146,6 +149,12 @@ class Game {
 			const pruneThresholdY = this._camera.getTopOfViewport() - 500;
 			this._staticObjects.forEach(obj => {
 				if (obj.mapPosition && obj.mapPosition[1] < pruneThresholdY) {
+					obj.deleteOnNextCycle();
+				}
+			});
+			// NPCs that opt in (dogs, novices, snowboarders) go the same way
+			this._movingObjects.forEach(obj => {
+				if (obj.despawnAboveViewport && obj.mapPosition[1] < pruneThresholdY) {
 					obj.deleteOnNextCycle();
 				}
 			});

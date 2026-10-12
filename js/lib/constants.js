@@ -16,9 +16,27 @@ export const SKIER_TRICK_INTERVAL_MS = 300;
 export const MONSTER_STANDARD_SPEED = 6;
 export const MONSTER_EATING_INTERVAL_MS = 300;
 export const MONSTER_EATING_STAGES = 6;
+export const MONSTER_ROAR_MS = 700;
+export const MONSTER_PAT_BELLY_MS = 1200;
+export const MONSTER_STABBED_MS = 500;
+export const MONSTER_HURT_MS = 600;
+export const MONSTER_KNOCKOUT_MS = 4000;
+export const MONSTER_STRIKE_REACH_X = 56; // pole reach, map px
+export const MONSTER_STRIKE_REACH_Y = 64;
+export const MONSTER_KNOCKOUT_POINTS = 1000;
+
+// Dog
+export const DOG_STANDARD_SPEED = 2;
+export const DOG_BARK_MS = 900;
+
+// Novice skier
+export const NOVICE_SKIER_STANDARD_SPEED = 2;
+export const NOVICE_SKIER_DAZED_MS = 3000;
 
 // Snowboarder physics
 export const SNOWBOARDER_STANDARD_SPEED = 3;
+export const SNOWBOARDER_TRICK_MS = 500;
+export const SNOWBOARDER_CRASH_MS = 2500;
 
 // Ski lift physics & layout
 export const SKI_LIFT_STANDARD_SPEED = 6;

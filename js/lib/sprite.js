@@ -109,8 +109,20 @@ class Sprite {
 			return;
 		}
 	
+		const image = dCtx.getLoadedImage(this.data.$imageFile);
+
+		// A fifth element of `true` draws the region mirrored horizontally
+		if (fr[4]) {
+			dCtx.save();
+			dCtx.translate(this.canvasX + fr[2], this.canvasY);
+			dCtx.scale(-1, 1);
+			dCtx.drawImage(image, fr[0], fr[1], fr[2], fr[3], 0, 0, fr[2], fr[3]);
+			dCtx.restore();
+			return;
+		}
+
 		dCtx.drawImage(
-			dCtx.getLoadedImage(this.data.$imageFile),
+			image,
 			fr[0], fr[1], fr[2], fr[3],
 			this.canvasX, this.canvasY, fr[2], fr[3]
 		);

@@ -2,6 +2,8 @@ import Camera from './lib/camera.js';
 import Monster from './lib/monster.js';
 import Sprite from './lib/sprite.js';
 import Snowboarder from './lib/snowboarder.js';
+import Dog from './lib/dog.js';
+import NoviceSkier from './lib/noviceSkier.js';
 import Skier from './lib/skier.js';
 import InfoBox from './lib/infoBox.js';
 import Game from './lib/game.js';
@@ -10,7 +12,13 @@ import isMobileDevice from './lib/isMobileDevice.js';
 import sprites from './spriteInfo.js';
 import SkiLift, { SkiLiftManager } from './lib/skiLift.js';
 import { SlalomCourse } from './lib/slalomCourse.js';
-import { PIXELS_PER_METRE, MONSTER_DISTANCE_THRESHOLD } from './lib/constants.js';
+import {
+	PIXELS_PER_METRE,
+	MONSTER_DISTANCE_THRESHOLD,
+	MONSTER_STRIKE_REACH_X,
+	MONSTER_STRIKE_REACH_Y,
+	MONSTER_KNOCKOUT_POINTS,
+} from './lib/constants.js';
 
 const mainCanvas = document.getElementById('skifree-canvas');
 const camera = Camera.create(mainCanvas.getContext('2d'));
@@ -22,13 +30,18 @@ const infoBoxControls = isMobileDevice()
 const dropRates = {
 	smallTree: 4,
 	tallTree: 2,
-	decoratedTallTree: 0.5,
+	decoratedTree: 0.3,
+	decoratedTree2: 0.3,
 	jump: 1,
 	thickSnow: 1,
 	rock: 1,
 	stump: 1,
 	deadTree: 1,
-	mogul: 2,
+	mogul: 1,
+	mogulSmall: 0.5,
+	mogulA: 0.5,
+	mogulB: 0.5,
+	mogulC: 0.5,
 	mushroom: 0.2
 };
 
@@ -72,12 +85,14 @@ function startNeverEndingGame() {
 	let game;
 	let skiLiftManager;
 	let slalomCourse;
+	let monsters = [];
 
 	function resetGame() {
 		state.distanceTravelled = 0;
 		state.livesLeft = 5;
 		state.highScore = Number(localStorage.getItem('highScore')) || 0;
 		game.reset();
+		monsters = [];
 		game.addStaticObject(startSign);
 		skiLiftManager.reset();
 		slalomCourse.reset();
@@ -126,6 +141,7 @@ function startNeverEndingGame() {
 		newMonster.setSpeed(player.getStandardSpeed());
 		newMonster.onHitting(player, monsterHitsSkierBehaviour);
 		game.addMovingObject(newMonster, 'monster');
+		monsters.push(newMonster);
 	}
 
 	function spawnBoarder() {
@@ -134,8 +150,69 @@ function startNeverEndingGame() {
 		const randomPositionBelow = camera.getRandomMapPositionBelowViewport();
 		newBoarder.setMapPosition(randomPositionAbove[0], randomPositionAbove[1]);
 		newBoarder.setMapPositionTarget(randomPositionBelow[0], randomPositionBelow[1]);
-		newBoarder.onHitting(player, sprites.snowboarder.hitBehaviour.skier);
+		newBoarder.onHitting(player, (boarder, skier) => {
+			skier.hasHitObstacle(boarder);
+			boarder.crash();
+		});
 		game.addMovingObject(newBoarder);
+	}
+
+	// Dogs appear just below the screen, trotting across the slope
+	function spawnDog() {
+		const dog = new Dog(sprites.dog);
+		const pos = camera.getRandomMapPositionBelowViewport();
+		dog.setMapPosition(pos[0], pos[1]);
+		dog.watch(player);
+		dog.onHitting(player, (d, skier) => {
+			skier.hasHitObstacle(d);
+			d.bark();
+		});
+		game.addMovingObject(dog);
+	}
+
+	// Beginners appear below the screen, so the player catches up with them
+	function spawnNoviceSkier() {
+		const novice = new NoviceSkier(sprites.noviceSkier);
+		const pos = camera.getRandomMapPositionBelowViewport();
+		novice.setMapPosition(pos[0], pos[1]);
+		novice.onHitting(player, (n, skier) => {
+			skier.hasHitObstacle(n);
+			n.knockOver();
+		});
+		game.addMovingObject(novice);
+	}
+
+	// X: jab with the ski pole. While the pole is extended, a yeti within reach
+	// in front of the skier is stabbed and knocked out (the fight-back row at
+	// the bottom of the sheet). Checked every cycle in checkPoleStrike().
+	function playerLunge() {
+		player.lunge();
+	}
+
+	function checkPoleStrike() {
+		if (!player.isStriking()) return;
+		const facingWest = player._facing() === 'west';
+		for (const monster of monsters) {
+			if (monster.deleted || monster.isKnockedOut() || monster.isEating) continue;
+			const dx = monster.mapPosition[0] - player.mapPosition[0];
+			const dy = monster.mapPosition[1] - player.mapPosition[1];
+			const inFront = facingWest ? dx <= 8 : dx >= -8;
+			const inReach = Math.abs(dx) <= MONSTER_STRIKE_REACH_X
+				&& dy >= -MONSTER_STRIKE_REACH_Y && dy <= MONSTER_STRIKE_REACH_Y;
+			if (inFront && inReach && monster.getStabbed(player)) {
+				player.addStylePoints(MONSTER_KNOCKOUT_POINTS);
+				return;
+			}
+		}
+	}
+
+	// C: swap between the default skier and the olive-haired alternate
+	function toggleSkin() {
+		if (player.skin === 'alt') {
+			player.setSkin('default', sprites.skier);
+		} else {
+			player.setSkin('alt', sprites.skierAlt);
+		}
 	}
 
 	function randomlySpawnNPC(spawnFunction, dropRate) {
@@ -150,13 +227,18 @@ function startNeverEndingGame() {
 		return Sprite.createObjects([
 			{ sprite: sprites.smallTree, dropRate: dropRates.smallTree },
 			{ sprite: sprites.tallTree, dropRate: dropRates.tallTree },
-			{ sprite: sprites.decoratedTallTree, dropRate: dropRates.decoratedTallTree },
+			{ sprite: sprites.decoratedTree, dropRate: dropRates.decoratedTree },
+			{ sprite: sprites.decoratedTree2, dropRate: dropRates.decoratedTree2 },
 			{ sprite: sprites.jump, dropRate: dropRates.jump },
 			{ sprite: sprites.thickSnow, dropRate: dropRates.thickSnow },
 			{ sprite: sprites.rock, dropRate: dropRates.rock },
 			{ sprite: sprites.stump, dropRate: dropRates.stump },
 			{ sprite: sprites.deadTree, dropRate: dropRates.deadTree },
 			{ sprite: sprites.mogul, dropRate: dropRates.mogul },
+			{ sprite: sprites.mogulSmall, dropRate: dropRates.mogulSmall },
+			{ sprite: sprites.mogulA, dropRate: dropRates.mogulA },
+			{ sprite: sprites.mogulB, dropRate: dropRates.mogulB },
+			{ sprite: sprites.mogulC, dropRate: dropRates.mogulC },
 			{ sprite: sprites.mushroom, dropRate: dropRates.mushroom },
 		], {
 			rateModifier: Math.max(800 - camera.logicalWidth(), 0),
@@ -167,6 +249,11 @@ function startNeverEndingGame() {
 
 	function tickNPCs() {
 		randomlySpawnNPC(spawnBoarder, 0.1);
+		if (player.isMoving) {
+			randomlySpawnNPC(spawnDog, 0.1);
+			randomlySpawnNPC(spawnNoviceSkier, 0.1);
+		}
+		monsters = monsters.filter(m => !m.deleted);
 		state.distanceTravelled = Number((player.getPixelsTravelledDownMountain() / PIXELS_PER_METRE).toFixed(1));
 		if (state.distanceTravelled > MONSTER_DISTANCE_THRESHOLD) {
 			randomlySpawnNPC(spawnMonster, 0.001);
@@ -186,7 +273,8 @@ function startNeverEndingGame() {
 		} else {
 			infoBox.setLines([
 				'SkiFree.js',
-				'Space / Ins / Left-Click / E = Jump | Air: Up/Down=Flip, Left/Right=Twist',
+				'Space / Ins / Left-Click / E = Jump | Air: Down=Flip, Up=Daffy, Left/Right=Twist',
+				'X = Pole jab (fight the yeti!) | C = Change skier',
 				'Slalom (Left) | Freestyle (Center) | Tree Slalom (Right)',
 				`Travelled ${state.distanceTravelled.toFixed(1)}m`,
 				`Style Points: ${player.stylePoints}`,
@@ -226,6 +314,9 @@ function startNeverEndingGame() {
 				return Sprite.prototype.draw.call(burningTree, ctx, `frame${frame}`);
 			};
 
+			// Skiing into it afterwards is still a crash; jumping over it is fine
+			burningTree.onHitting(skier, sprites.burningTree.hitBehaviour.skier);
+
 			deadTree.deleteOnNextCycle();
 			game.addStaticObject(burningTree);
 			skier.addStylePoints(200);
@@ -234,12 +325,15 @@ function startNeverEndingGame() {
 		}
 	};
 
-	// Mogul: Gives the skier a mini-jump / hop when skied over
-	sprites.mogul.hitBehaviour.skier = (mogul, skier) => {
+	// Moguls: Give the skier a mini-jump / hop when skied over
+	const mogulHop = (mogul, skier) => {
 		if (!skier.isJumping && skier.isMoving) {
 			skier.jump(400); // 400ms mini-hop instead of the standard 1000ms jump
 		}
 	};
+	for (const key of ['mogul', 'mogulSmall', 'mogulA', 'mogulB', 'mogulC']) {
+		sprites[key].hitBehaviour.skier = mogulHop;
+	}
 
 	// Mushroom: Vanishes and awards +100 Style Points when grabbed mid-air
 	sprites.mushroom.hitBehaviour.skier = (mushroom, skier) => {
@@ -282,6 +376,7 @@ function startNeverEndingGame() {
 		}
 
 		slalomCourse.update();
+		checkPoleStrike();
 
 		const newTerrain = spawnTerrain();
 		if (newTerrain && newTerrain.length) {
@@ -300,7 +395,11 @@ function startNeverEndingGame() {
 
 	game.addUIElement(infoBox);
 
-	setupInput({ player, game, canvas: mainCanvas, spawnMonster, spawnBoarder, resetGame });
+	setupInput({
+		player, game, canvas: mainCanvas,
+		spawnMonster, spawnBoarder, spawnDog, spawnNoviceSkier,
+		playerLunge, toggleSkin, resetGame,
+	});
 
 	player.isMoving = false;
 	player.setDirection(270);

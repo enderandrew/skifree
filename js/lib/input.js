@@ -1,4 +1,8 @@
-export default function setupInput({ player, game, canvas, spawnMonster, spawnBoarder, resetGame }) {
+export default function setupInput({
+	player, game, canvas,
+	spawnMonster, spawnBoarder, spawnDog = () => {}, spawnNoviceSkier = () => {},
+	playerLunge = () => {}, toggleSkin = () => {}, resetGame,
+}) {
 	canvas.style.touchAction = 'none';
 
 	const executeJumpOrTrick = () => {
@@ -163,6 +167,18 @@ export default function setupInput({ player, game, canvas, spawnMonster, spawnBo
 				break;
 			case 'KeyB':
 				spawnBoarder();
+				break;
+			case 'KeyG':
+				spawnDog();
+				break;
+			case 'KeyN':
+				spawnNoviceSkier();
+				break;
+			case 'KeyX':
+				playerLunge();
+				break;
+			case 'KeyC':
+				toggleSkin();
 				break;
 		}
 	});
