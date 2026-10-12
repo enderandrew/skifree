@@ -13,6 +13,8 @@ import {
 	SKIER_JUMP_SPEED_BONUS,
 	SKIER_DEEP_SNOW_FACTOR,
 	SKIER_SKATE_FRAME_MS,
+	WIND_AIRBORNE_FACTOR,
+	WIND_STANDING_FACTOR,
 } from './constants.js';
 
 const WALK_FRAMES = 8;
@@ -281,6 +283,17 @@ class Skier extends Sprite {
 		if (this.hasBeenHit) return;
 		this._skate();
 		this.mapPosition[0] += this.speed * 2;
+	}
+
+	// Sideways push from a wind gust, in map pixels for this cycle.
+	// Airborne skiers drift further; a skier standing still with their edges
+	// dug in barely moves; a crashed or eaten skier doesn't move at all.
+	applyWind(dx) {
+		if (!dx || this.hasBeenHit || this.isBeingEaten || this.isHidden) return;
+		let factor = 1;
+		if (this.isJumping) factor = WIND_AIRBORNE_FACTOR;
+		else if (!this.isMoving && !this._isWalkingUp) factor = WIND_STANDING_FACTOR;
+		this.mapPosition[0] += dx * factor;
 	}
 
 	// Called every frame the skier overlaps a deep-snow patch

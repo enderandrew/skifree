@@ -3,19 +3,36 @@ class Camera {
 		this._ctx = ctx;
 		this._images = {};
 		this._centralSprite = null;
+		this._zoom = 1; // CSS pixels per game pixel (see viewport.js)
+	}
+
+	setZoom(zoom) {
+		this._zoom = zoom > 0 ? zoom : 1;
+	}
+
+	getZoom() {
+		return this._zoom;
+	}
+
+	// CSS-pixel coordinates (e.g. from a pointer event) → game coordinates
+	cssToLogical(x, y) {
+		return [x / this._zoom, y / this._zoom];
 	}
 
 	// Logical (CSS) dimensions — independent of devicePixelRatio.
 	// All game coordinate calculations must use these so that world coordinates
 	// stay in logical pixels regardless of the backing-store scale.
+	// Logical size is in game pixels: the CSS size divided by the zoom.
 	logicalWidth() {
 		const styleWidth = this._ctx.canvas.style?.width;
-		return styleWidth ? parseFloat(styleWidth) : this._ctx.canvas.width;
+		const css = styleWidth ? parseFloat(styleWidth) : this._ctx.canvas.width;
+		return css / this._zoom;
 	}
 
 	logicalHeight() {
 		const styleHeight = this._ctx.canvas.style?.height;
-		return styleHeight ? parseFloat(styleHeight) : this._ctx.canvas.height;
+		const css = styleHeight ? parseFloat(styleHeight) : this._ctx.canvas.height;
+		return css / this._zoom;
 	}
 
 	storeLoadedImage(key, image) {

@@ -5,6 +5,10 @@ import Snowboarder from './lib/snowboarder.js';
 import Dog from './lib/dog.js';
 import NoviceSkier from './lib/noviceSkier.js';
 import ScorePopup from './lib/scorePopup.js';
+import Wind from './lib/wind.js';
+import WindSound from './lib/windSound.js';
+import Snow from './lib/snow.js';
+import { fitCanvasToWindow, watchViewport } from './lib/viewport.js';
 import Skier from './lib/skier.js';
 import InfoBox from './lib/infoBox.js';
 import Game from './lib/game.js';
@@ -22,6 +26,8 @@ import {
 } from './lib/constants.js';
 
 const mainCanvas = document.getElementById('skifree-canvas');
+const snow = new Snow();
+const windSound = new WindSound('wind.mp3');
 const camera = Camera.create(mainCanvas.getContext('2d'));
 const imageSources = ['sprite-characters.png', 'skifree-objects.png'];
 const infoBoxControls = isMobileDevice()
@@ -87,6 +93,7 @@ function startNeverEndingGame() {
 	let skiLiftManager;
 	let slalomCourse;
 	let monsters = [];
+	let wind;
 
 	function resetGame() {
 		state.distanceTravelled = 0;
@@ -94,6 +101,7 @@ function startNeverEndingGame() {
 		state.highScore = Number(localStorage.getItem('highScore')) || 0;
 		game.reset();
 		monsters = [];
+		wind.reset();
 		game.addStaticObject(startSign);
 		skiLiftManager.reset();
 		slalomCourse.reset();
@@ -131,6 +139,8 @@ function startNeverEndingGame() {
 			game.pause();
 			game.cycle();
 			game.draw();
+			windSound.stop();
+			snow.setWind(0);
 		}
 	}
 
@@ -425,8 +435,21 @@ function startNeverEndingGame() {
 
 	game.addUIElement(infoBox);
 
+	// Gusts push the skier sideways, lean the CSS snow and play wind.mp3
+	wind = new Wind({
+		player,
+		onGustStart: () => windSound.start(),
+		onGustEnd: () => windSound.stop(),
+		onChange: strength => {
+			snow.setWind(strength);
+			windSound.setStrength(strength);
+		},
+	});
+	game.addUIElement(wind);
+	windSound.preload();
+
 	setupInput({
-		player, game, canvas: mainCanvas,
+		player, game, canvas: mainCanvas, camera,
 		spawnMonster, spawnBoarder, spawnDog, spawnNoviceSkier,
 		playerLunge, toggleSkin, resetGame,
 	});
@@ -437,17 +460,15 @@ function startNeverEndingGame() {
 	game.start();
 }
 
+// Re-fit on resize, rotation or a move to a screen with a different pixel
+// density. Snowflakes are rebuilt once the resizing settles.
+let snowRebuild = null;
 function resizeCanvas() {
-	const dpr = window.devicePixelRatio || 1;
-	mainCanvas.style.width = `${window.innerWidth}px`;
-	mainCanvas.style.height = `${window.innerHeight}px`;
-	mainCanvas.width = Math.round(window.innerWidth * dpr);
-	mainCanvas.height = Math.round(window.innerHeight * dpr);
-	camera.scale(dpr, dpr);
-	camera.imageSmoothingEnabled = false;
+	fitCanvasToWindow(mainCanvas, camera);
+	clearTimeout(snowRebuild);
+	snowRebuild = setTimeout(() => snow.populate(), 250);
 }
 
-window.addEventListener('resize', resizeCanvas, false);
-
+watchViewport(resizeCanvas);
 resizeCanvas();
 loadImages(imageSources).then(startNeverEndingGame);

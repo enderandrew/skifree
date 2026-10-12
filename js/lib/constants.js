@@ -50,3 +50,12 @@ export const SKI_LIFT_BASE_COLUMN_X = -250;
 // Game world
 export const PIXELS_PER_METRE = 18;
 export const MONSTER_DISTANCE_THRESHOLD = 2000;
+// Wind gusts
+export const WIND_MIN_GAP_MS = 12000;   // calm spell between gusts
+export const WIND_MAX_GAP_MS = 25000;
+export const WIND_MIN_GUST_MS = 2500;   // how long a gust lasts
+export const WIND_MAX_GUST_MS = 4500;
+export const WIND_RAMP_FRACTION = 0.25; // share of the gust spent building / dying away
+export const WIND_MAX_PUSH = 1.6;       // sideways map px per cycle at full strength
+export const WIND_AIRBORNE_FACTOR = 1.5; // jumping skiers catch more wind
+export const WIND_STANDING_FACTOR = 0.3; // edges dug in while stopped

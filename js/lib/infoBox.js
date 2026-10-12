@@ -14,9 +14,18 @@ class InfoBox {
 	}
 
 	draw(dContext) {
-		dContext.font = '11px monospace';
-		const fontSizeMatch = dContext.font.match(/(\d+)px/);
-		const fontSize = fontSizeMatch ? Number(fontSizeMatch[1]) : 11;
+		// Shrink the text on narrow screens (phones in portrait) so the
+		// longest line still fits, down to a readable minimum.
+		const BASE_SIZE = 11;
+		const MIN_SIZE = 7;
+		dContext.font = `${BASE_SIZE}px monospace`;
+		const widest = Math.max(0, ...this.lines.map(line => dContext.measureText(line).width));
+		const available = dContext.logicalWidth() - (this.right ?? this.left ?? 0) - 10;
+		let fontSize = BASE_SIZE;
+		if (widest > available && widest > 0) {
+			fontSize = Math.max(MIN_SIZE, Math.floor(BASE_SIZE * available / widest));
+			dContext.font = `${fontSize}px monospace`;
+		}
 		const textHeight = fontSize * 1.5;
 
 		let yOffset = 0;

@@ -1,5 +1,5 @@
 export default function setupInput({
-	player, game, canvas,
+	player, game, canvas, camera,
 	spawnMonster, spawnBoarder, spawnDog = () => {}, spawnNoviceSkier = () => {},
 	playerLunge = () => {}, toggleSkin = () => {}, resetGame,
 }) {
@@ -80,8 +80,11 @@ export default function setupInput({
 	canvas.addEventListener('pointermove', e => {
 		if (e.pointerType === 'mouse' || e.pointerId === activePointerId) {
 			const rect = canvas.getBoundingClientRect();
-			game.setMouseX(e.clientX - rect.left);
-			game.setMouseY(e.clientY - rect.top);
+			const [x, y] = camera
+				? camera.cssToLogical(e.clientX - rect.left, e.clientY - rect.top)
+				: [e.clientX - rect.left, e.clientY - rect.top];
+			game.setMouseX(x);
+			game.setMouseY(y);
 			if (!player.isJumping) {
 				player.resetDirection();
 				player.startMovingIfPossible();
